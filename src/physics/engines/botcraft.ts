@@ -2162,7 +2162,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   checkInsideBlocks(player: PlayerState, world: World, worldSettings = new PhysicsWorldSettings(this.data)) {
-    if (!this.verLessThan("1.21.9")) {
+    if (!this.verLessThan("1.21.5")) {
       for (const { pos, intersects } of this.blocksInsideAlongMove(player)) {
         const block = world.getBlock(pos);
         if (block != null && block.type !== this.airId) this.entityInside(player, world, pos, block, worldSettings, intersects);
@@ -2184,9 +2184,10 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
-   * The blocks Entity.checkInsideBlocks visits from 1.21.9, each once, in order: the tick's move (else the tick start
-   * to the position) split per axis (Direction.axisStepOrder of the requested move), and for each step
-   * BlockGetter.forEachBlockIntersectedBetween with the box at its end. `intersects` is the flag 1.21.10+ pass to
+   * The blocks Entity.checkInsideBlocks visits from 1.21.5, each once, in order: the tick's move (else the tick start
+   * to the position) split per axis (axisStepOrder of the move made, of the requested move from 1.21.9), and for each
+   * step the blocks BlockGetter.forEachBlockIntersectedBetween visits with the box at its end: before 1.21.9 those of
+   * that box (a step of a block or more is not modeled further). `intersects` is the flag 1.21.10+ pass to
    * entityInside: a step of about a block or more, or a block the box at the end overlaps.
    */
   private blocksInsideAlongMove(player: PlayerState): { pos: Vec3; intersects: boolean }[] {
@@ -2196,7 +2197,8 @@ export class BotcraftPhysics implements IPhysics {
     const steps: [Vec3, Vec3][] = [];
     const delta = move.to.minus(move.from);
     if (move.movement != null && delta.norm() ** 2 > 0) {
-      const order: ("x" | "y" | "z")[] = Math.abs(move.movement.x) < Math.abs(move.movement.z) ? ["y", "z", "x"] : ["y", "x", "z"];
+      const axes = this.verLessThan("1.21.9") ? delta : move.movement;
+      const order: ("x" | "y" | "z")[] = Math.abs(axes.x) < Math.abs(axes.z) ? ["y", "z", "x"] : ["y", "x", "z"];
       let from = move.from;
       for (const axis of order) {
         if (delta[axis] === 0) continue;
@@ -2211,7 +2213,10 @@ export class BotcraftPhysics implements IPhysics {
     for (const [from, to] of steps) {
       const box = getCollider(player.pose, to).expand(-9.999999747378752e-6, -9.999999747378752e-6, -9.999999747378752e-6);
       const long = from.distanceSquared(to) > 0.9999900000002526 * 0.9999900000002526;
-      this.forEachBlockIntersectedBetween(from, to, box, (pos) => {
+      const visitStep = this.verLessThan("1.21.9")
+        ? (visit: (pos: Vec3) => void) => this.forEachBlockIntersectedBetween(to, to, box, visit)
+        : (visit: (pos: Vec3) => void) => this.forEachBlockIntersectedBetween(from, to, box, visit);
+      visitStep((pos) => {
         const key = `${pos.x},${pos.y},${pos.z}`;
         if (visited.has(key)) return;
         visited.add(key);
