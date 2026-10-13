@@ -31,7 +31,7 @@ describe("World movement simulation", () => {
 
     expect(rig.fakePlayer.entity.position.x).toBe(0);
     expect(rig.fakePlayer.entity.position.y).toBe(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-2.4694803842498265, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-2.469480432312684, 8);
   });
 
   it("supports sprint-jumping", () => {
@@ -57,7 +57,7 @@ describe("World movement simulation", () => {
     }
 
     expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196061052951, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196127106185, 8);
   });
 
   it("matches walking fall-speed travel distance", () => {
@@ -74,7 +74,7 @@ describe("World movement simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-5.082680484887672, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-5.082680583810565, 8);
     expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
   });
 
@@ -93,7 +93,7 @@ describe("World movement simulation", () => {
       rig.playerState.apply(rig.fakePlayer);
     }
 
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-6.607484441009365, 8);
+    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-6.607484569609124, 8);
     expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
   });
 

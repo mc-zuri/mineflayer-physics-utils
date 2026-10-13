@@ -558,11 +558,9 @@ export class BotcraftPhysics implements IPhysics {
 
       this.inputsToJump(player, world, ctx.worldSettings);
 
-      // TODO: properly implement heading handler. forward-axis is forward, left-axis = strafe. weird naming.
-      heading.forward *= 0.98;
-      heading.strafe *= 0.98;
-      // player->inputs.forward_axis *= 0.98f;
-      // player->inputs.left_axis *= 0.98f;
+      // LivingEntity.aiStep: xxa and zza are floats, scaled by 0.98F. forward-axis is forward, left-axis = strafe.
+      heading.forward = Math.fround(heading.forward * Math.fround(0.98));
+      heading.strafe = Math.fround(heading.strafe * Math.fround(0.98));
 
       // Compensate water downward speed depending on looking direction (?)
 
