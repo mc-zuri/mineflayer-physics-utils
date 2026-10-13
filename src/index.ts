@@ -32,3 +32,4 @@ export { ControlStateHandler } from "./physics/player";
 
 export type { SimulationGoal, Controller, OnGoalReachFunction }from "./simulators";
 export { convertPlayerState, applyToPlayerState } from "./util/physicsUtils";
+export { javaTrig, setJavaTrig } from "./util/javaTrig";

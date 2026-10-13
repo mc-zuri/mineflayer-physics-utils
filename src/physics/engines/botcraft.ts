@@ -14,6 +14,7 @@ import {
 import * as math from "../info/math";
 import * as attributes from "../info/attributes";
 import { Mth, floatRadians, mthFor } from "../../util/mth";
+import { javaTrig } from "../../util/javaTrig";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
@@ -1112,7 +1113,7 @@ export class BotcraftPhysics implements IPhysics {
       const cos = this.mth.cos(pitchRad);
       lift = f32(cos * cos * lookFactor);
     } else {
-      const cos = Math.cos(pitchRad);
+      const cos = javaTrig.cos(pitchRad);
       lift = cos * cos * (this.verLessThan("1.21.2") ? lookFactor : 1.0);
     }
 
