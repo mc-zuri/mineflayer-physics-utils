@@ -669,17 +669,21 @@ export class BotcraftPhysics implements IPhysics {
       return;
     }
 
-    // Apply slow down to player inputs when moving slowly
     // the impulses are floats: (float)(impulse * factor)
-    if (isMovingSlowly) {
-      const factor = this.sneakingSpeedFactor(player);
+    const slowInput = (factor: number) => {
       heading.forward = Math.fround(heading.forward * factor);
       heading.strafe = Math.fround(heading.strafe * factor);
-    }
+    };
+    // LocalPlayer.aiStep: using an item slows the input by 0.2F, after the sneak slowdown of the input's tick, from
+    // 1.21.4 before the sneak slowdown that moved out of it
+    const usingItemFirst = this.verGreaterThan("1.21.3");
+    if (player.isUsingItem && usingItemFirst) slowInput(Math.fround(0.2));
+    if (isMovingSlowly) slowInput(this.sneakingSpeedFactor(player));
+    if (player.isUsingItem && !usingItemFirst) slowInput(Math.fround(0.2));
   }
 
   /**
-   * 1.21.5+ LocalPlayer.modifyInput, the float move vector: scaled by 0.98F and the sneak slowdown, then stretched
+   * 1.21.5+ LocalPlayer.modifyInput, the float move vector: scaled by 0.98F, item use and the sneak slowdown, then stretched
    * towards the unit square (modifyInputSpeedForSquareMovement), so a diagonal is as fast as a straight move.
    */
   private modifyInput(ctx: EPhysicsCtx, heading: Heading, world: World) {
@@ -693,6 +697,7 @@ export class BotcraftPhysics implements IPhysics {
       y = f32(y * factor);
     };
     scale(f32(0.98));
+    if (player.isUsingItem) scale(f32(0.2));
     if (this.isMovingSlowly(ctx, world)) scale(this.sneakingSpeedFactor(player));
 
     const length = f32(Math.sqrt(f32(f32(x * x) + f32(y * y))));
@@ -1907,11 +1912,6 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   applyInputs(inputStrength: number, player: PlayerState) {
-    // Add slowdown when using items (like food)
-    if (player.isUsingItem) {
-      inputStrength *= Math.fround(0.2);
-    }
-
     const yaw = floatRadians(this.yawDegrees(player));
 
     if (this.verLessThan("1.14")) {
