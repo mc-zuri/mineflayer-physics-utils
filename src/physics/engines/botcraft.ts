@@ -1160,12 +1160,10 @@ export class BotcraftPhysics implements IPhysics {
         const friction = blockSlipperiness ?? ctx.worldSettings.defaultSlipperiness;
 
         // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
+        // LivingEntity.travel: a float, f * 0.91F on the ground and 0.91F in the air.
         const inertia = player.lastOnGround
-          // ponytail: preserve legacy default-block rounding until those baselines are updated.
-          ? blockSlipperiness == null
-            ? friction * ctx.airborneInertia
-            : Math.fround(Math.fround(friction) * Math.fround(ctx.airborneInertia))
-          : ctx.airborneInertia;
+          ? Math.fround(Math.fround(friction) * Math.fround(ctx.airborneInertia))
+          : Math.fround(ctx.airborneInertia);
 
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
