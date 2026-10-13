@@ -874,6 +874,19 @@ export class BotcraftPhysics implements IPhysics {
     heading.forward = y;
   }
 
+  /** An attribute's value with its modifiers, clamped to its range (RangedAttribute.sanitizeValue). */
+  private attributeValue(key: string, attribute: Parameters<typeof attributes.getAttributeValue>[0]): number {
+    if (this.attributeRanges == null) {
+      this.attributeRanges = new Map();
+      for (const [name, data] of Object.entries(this.data.attributesByName)) {
+        this.attributeRanges.set(extractAttribute(this, name), data as unknown as { min: number; max: number });
+      }
+    }
+    return attributes.getAttributeValue(attribute, this.attributeRanges.get(key));
+  }
+
+  private attributeRanges?: Map<string, { min: number; max: number }>;
+
   /**
    * The factor of the sneak slowdown: before 1.19 KeyboardInput's 0.3D; 1.19 - 1.20 the float
    * Mth.clamp(0.3F + 0.15F * swift sneak level, 0F, 1F); since, the sneaking speed attribute as a float.
@@ -883,7 +896,7 @@ export class BotcraftPhysics implements IPhysics {
     if (this.verLessThan("1.19")) return 0.3;
     if (this.verLessThan("1.21")) return Math.min(Math.max(f32(f32(0.3) + f32(player.swiftSneak * f32(0.15))), 0), 1);
     const synced = player.attributes?.[this.sneakingSpeedAttribute];
-    return f32(synced ? attributes.getAttributeValue(synced) : 0.3);
+    return f32(synced ? this.attributeValue(this.sneakingSpeedAttribute, synced) : 0.3);
   }
 
   private isSwimmingAndNotFlying(ctx: EPhysicsCtx, world: World): boolean {
@@ -1269,7 +1282,7 @@ export class BotcraftPhysics implements IPhysics {
         } else {
           // the jump strength attribute, with its modifiers
           const synced = entity.attributes[this.jumpStrengthAttribute];
-          const value = Math.fround(synced ? attributes.getAttributeValue(synced) : Math.fround(0.42));
+          const value = Math.fround(synced ? this.attributeValue(this.jumpStrengthAttribute, synced) : Math.fround(0.42));
           const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
           if (jumpPower > 1e-5) {
             player.vel.y = Math.max(jumpPower, player.vel.y);
@@ -1392,7 +1405,7 @@ export class BotcraftPhysics implements IPhysics {
     // from the movement speed the server synced (the server adds them with the effect).
 
     // Calculate the final speed and cast the entire result to a 32-bit float
-    const attributeSpeed = Math.fround(attributes.getAttributeValue(attribute));
+    const attributeSpeed = Math.fround(this.attributeValue(this.movementSpeedAttribute, attribute));
     return attributeSpeed;
   }
 
@@ -1415,7 +1428,7 @@ export class BotcraftPhysics implements IPhysics {
       } else {
         // the gravity attribute, with its modifiers (LivingEntity.getDefaultGravity)
         const synced = player.attributes[this.gravityAttribute];
-        const defaultGravity = synced ? attributes.getAttributeValue(synced) : ctx.gravity;
+        const defaultGravity = synced ? this.attributeValue(this.gravityAttribute, synced) : ctx.gravity;
         gravity = goingDown && hasSlowFalling ? Math.min(0.01, defaultGravity) : defaultGravity;
       }
 
@@ -1432,7 +1445,7 @@ export class BotcraftPhysics implements IPhysics {
         } else {
           // the synced attribute with its modifiers (depth strider adds 0.33333334 per level)
           const synced = player.attributes[this.waterMovementEfficiencyAttribute];
-          depthStriderMult = synced ? Math.fround(attributes.getAttributeValue(synced)) : 0;
+          depthStriderMult = synced ? Math.fround(this.attributeValue(this.waterMovementEfficiencyAttribute, synced)) : 0;
         }
 
         if (!player.onGround) {
@@ -1944,7 +1957,7 @@ export class BotcraftPhysics implements IPhysics {
       return onSoulSpeedBlock && player.soulSpeed > 0 ? 1 : factor;
     }
     const synced = player.attributes[this.movementEfficiencyAttribute];
-    const efficiency = synced ? f32(attributes.getAttributeValue(synced)) : 0;
+    const efficiency = synced ? f32(this.attributeValue(this.movementEfficiencyAttribute, synced)) : 0;
     return f32(factor + f32(efficiency * f32(1 - factor)));
   }
 

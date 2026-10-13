@@ -3,7 +3,11 @@ type Modifier = {uuid: string, operation: number /*there are others besides 0|1|
 type Attribute = {value: number, modifiers: Modifier[]}
 
 
-export function getAttributeValue(prop: Attribute): number {
+/**
+ * AttributeInstance.getValue: the base, the additions, the base multiplications, then the total multiplications,
+ * clamped to the attribute's range when it is given (RangedAttribute.sanitizeValue).
+ */
+export function getAttributeValue(prop: Attribute, range?: { min: number; max: number }): number {
     let x = prop.value;
     for (const mod of prop.modifiers) {
         if (mod.operation !== 0) continue;
@@ -18,6 +22,7 @@ export function getAttributeValue(prop: Attribute): number {
         if (mod.operation !== 2) continue;
         y += y * mod.amount;
     }
+    if (range != null) y = Math.min(Math.max(y, range.min), range.max);
     return y;
 }
 
