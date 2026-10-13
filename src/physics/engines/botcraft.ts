@@ -637,6 +637,8 @@ export class BotcraftPhysics implements IPhysics {
 
     if (this.verGreaterThan("1.13.2")) {
       this.updatePoses(ctx, world);
+    } else {
+      this.updateLegacySize(player, world);
     }
 
     // Preserve the current inputs for the next tick after all previous-state
@@ -1400,36 +1402,74 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
-   * The bounding box Entity.move starts from. Before 1.17 vanilla keeps it across ticks and only builds it from the
-   * position in setPos (float half width and height), so the kept box is used while pos is still the position the
-   * engine left with it; a pose of another size refits it as Entity.refreshDimensions (setSize before 1.14) does.
+   * The bounding box Entity.move starts from, with its size. Before 1.17 vanilla keeps it across ticks and only builds
+   * it from the position in setPos (float half width and height), so the kept box is used while pos is still the
+   * position the engine left with it; on 1.14 - 1.16 a pose of another size refits it as Entity.refreshDimensions does
+   * (before 1.14 the size changes at the end of the tick, see updateLegacySize).
    */
-  private boundingBoxForMove(player: PlayerState): AABB {
+  private boundingBoxForMove(player: PlayerState): { bb: AABB; width: number; height: number } {
     const kept = player.keptBoundingBox;
-    if (!this.verLessThan("1.17") || kept == null) return player.getBB();
+    const legacySize = this.verLessThan("1.14");
+    const width = legacySize ? Math.fround(0.6) : player.halfWidth * 2;
+    const height = legacySize ? this.legacyPlayerHeight(player, player.prevControl.sneak) : player.height;
+    const fromPos = () => ({ bb: this.boxAt(player.pos, width, height), width, height });
+    if (!this.verLessThan("1.17") || kept == null) return fromPos();
     const { bb, pos } = kept;
-    if (pos.x !== player.pos.x || pos.y !== player.pos.y || pos.z !== player.pos.z) return player.getBB();
-    const width = player.halfWidth * 2;
-    const height = player.height;
-    if (width === kept.width && height === kept.height) return bb.clone();
-    if (width < kept.width) return player.getBB();
-    return new AABB(bb.minX, bb.minY, bb.minZ, bb.minX + width, bb.minY + height, bb.minZ + width);
+    if (pos.x !== player.pos.x || pos.y !== player.pos.y || pos.z !== player.pos.z) return fromPos();
+    if (legacySize || (width === kept.width && height === kept.height)) return { bb: bb.clone(), width: kept.width, height: kept.height };
+    if (width < kept.width) return fromPos();
+    return { bb: new AABB(bb.minX, bb.minY, bb.minZ, bb.minX + width, bb.minY + height, bb.minZ + width), width, height };
+  }
+
+  /** Entity.setPos's box: float half width and height around the position. */
+  private boxAt(pos: Vec3, width: number, height: number): AABB {
+    const w = width / 2;
+    return new AABB(pos.x - w, pos.y, pos.z - w, pos.x + w, pos.y + height, pos.z + w);
+  }
+
+  /**
+   * The player's height before 1.14 (EntityPlayer.updateSize; 1.8 keeps 1.8F): 0.6F gliding (1.13: or swimming), 1.65F
+   * sneaking, else 1.8F.
+   */
+  private legacyPlayerHeight(player: PlayerState, sneaking: boolean): number {
+    if (this.verLessThan("1.9")) return Math.fround(1.8);
+    if (player.fallFlying || (!this.verLessThan("1.13") && player.swimming)) return Math.fround(0.6);
+    return Math.fround(sneaking ? 1.65 : 1.8);
+  }
+
+  /**
+   * EntityPlayer.updateSize at the end of the tick (1.9 - 1.13): a new height refits the kept box on its lower corner
+   * (Entity.setSize), unless the refitted box would collide with a block.
+   */
+  private updateLegacySize(player: PlayerState, world: World) {
+    const kept = player.keptBoundingBox;
+    if (kept == null || this.verLessThan("1.9")) return;
+    const height = this.legacyPlayerHeight(player, player.control.sneak);
+    if (height === kept.height) return;
+    const { bb } = kept;
+    const resized = new AABB(bb.minX, bb.minY, bb.minZ, bb.minX + kept.width, bb.minY + height, bb.minZ + kept.width);
+    // 1.13's World.isCollisionBoxesEmpty compares voxel shapes, within 1e-7
+    const test = this.verLessThan("1.13") ? resized : resized.clone().expand(-COLLISION_EPSILON, -COLLISION_EPSILON, -COLLISION_EPSILON);
+    if (this.getSurroundingBBs(test, world).some((box) => box.intersects(test))) return;
+    player.keptBoundingBox = { ...kept, bb: resized, height };
   }
 
   /**
    * Before 1.17 Entity.move moves the bounding box and derives the position from it (setLocationFromBoundingbox); the
    * box is kept for the next tick either way.
    */
-  private keepBoundingBox(player: PlayerState, bb: AABB, moved: boolean) {
+  private keepBoundingBox(player: PlayerState, sized: { bb: AABB; width: number; height: number }, moved: boolean) {
+    const { bb, width, height } = sized;
     if (moved) player.pos.set((bb.minX + bb.maxX) / 2, bb.minY, (bb.minZ + bb.maxZ) / 2);
-    player.keptBoundingBox = { bb, pos: player.pos.clone(), width: player.halfWidth * 2, height: player.height };
+    player.keptBoundingBox = { bb, pos: player.pos.clone(), width, height };
   }
 
   applyMovement(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     if (player.gameMode === "spectator") {
       if (this.verLessThan("1.17")) {
-        this.keepBoundingBox(player, this.boundingBoxForMove(player).move(player.vel), true);
+        const start = this.boundingBoxForMove(player);
+        this.keepBoundingBox(player, { ...start, bb: start.bb.move(player.vel) }, true);
       } else {
         player.pos.translate(player.vel.x, player.vel.y, player.vel.z);
       }
@@ -1489,7 +1529,8 @@ export class BotcraftPhysics implements IPhysics {
     // 1.20.5: this is var2 in entity::move
     const movementBeforeCollisions = movement.clone();
 
-    const boundingBox = this.boundingBoxForMove(player);
+    const sizedBox = this.boundingBoxForMove(player);
+    const boundingBox = sizedBox.bb;
     let legacyMovedBox: AABB | null = null;
     if (this.verLessThan("1.14")) {
       const legacy = this.legacyCollide(world, boundingBox, movement, Math.fround(maxUpStep), player.onGround);
@@ -1552,10 +1593,10 @@ export class BotcraftPhysics implements IPhysics {
     }
     // console.log('after all collision', movement)
     if (legacyMovedBox != null) {
-      this.keepBoundingBox(player, legacyMovedBox, true);
+      this.keepBoundingBox(player, { ...sizedBox, bb: legacyMovedBox }, true);
     } else if (this.verLessThan("1.17")) {
       const moved = movement.norm() ** 2 > 1e-7;
-      this.keepBoundingBox(player, moved ? boundingBox.move(movement) : boundingBox, moved);
+      this.keepBoundingBox(player, { ...sizedBox, bb: moved ? boundingBox.move(movement) : boundingBox }, moved);
     } else if (movement.norm() ** 2 > 1e-7) {
       player.pos.add(movement);
     }
