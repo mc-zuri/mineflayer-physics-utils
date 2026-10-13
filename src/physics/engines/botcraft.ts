@@ -877,6 +877,7 @@ export class BotcraftPhysics implements IPhysics {
     this.inputsToCrouch(ctx, heading, world);
     // the input's move vector as LocalPlayer.updateAutoJump reads it
     const moveVector = { x: heading.strafe, y: heading.forward };
+    this.pushOutOfBlocks(player, world);
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx);
 
@@ -1905,6 +1906,85 @@ export class BotcraftPhysics implements IPhysics {
       this.applyFireworkBoost(player, rockets - player.fireworkRocketsBeforePlayer);
       if (player.fireworkRocketDuration > 0) --player.fireworkRocketDuration;
     }
+  }
+
+  /**
+   * Inside a suffocating block the player is pushed toward the nearest open side, from the four corners 0.35 widths
+   * out: since 1.16 LocalPlayer.moveTowardsClosestSpace (the motion on that axis set to 0.1, a cell blocked when a
+   * suffocating block's shape meets the column of the box there); before, half a block above the feet
+   * (EntityPlayerSP.pushOutOfBlocks, LocalPlayer.checkInBlock 1.14 - 1.15) with 0.1F before 1.14, a cell blocked by a
+   * normal cube there or above it (a swimmer in 1.13: there only; any open side is two blocks high), 1.14 - 1.15 by a
+   * view-blocking block in the box's height.
+   */
+  private pushOutOfBlocks(player: PlayerState, world: World) {
+    if (player.gameMode === "spectator") return;
+    const box = this.boundingBoxForMove(player).bb;
+    const w = Math.fround(player.halfWidth * 2) * 0.35;
+    const corners = [[-w, w], [-w, -w], [w, -w], [w, w]];
+    const suffocatesAt = (x: number, y: number, z: number) => this.isSuffocating(world.getBlock(new Vec3(x, y, z)));
+    let blocked: (x: number, z: number) => boolean;
+    let open: (x: number, z: number) => boolean;
+    if (!this.verLessThan("1.16")) {
+      blocked = (x, z) => {
+        const column = new AABB(x, box.minY, z, x + 1, box.maxY, z + 1).expand(-1e-7, -1e-7, -1e-7);
+        for (let cy = Math.floor(column.minY) - 1; cy <= Math.floor(column.maxY); cy++) {
+          const block = world.getBlock(new Vec3(x, cy, z));
+          if (!this.isSuffocating(block)) continue;
+          if (block!.shapes.some((b) => column.intersects(new AABB(x + b[0], cy + b[1], z + b[2], x + b[3], cy + b[4], z + b[5])))) return true;
+        }
+        return false;
+      };
+      open = (x, z) => !blocked(x, z);
+    } else {
+      const by = Math.floor(box.minY + 0.5);
+      if (!this.verLessThan("1.14")) {
+        blocked = (x, z) => {
+          for (let cy = Math.floor(box.minY); cy < Math.ceil(box.maxY); cy++) if (suffocatesAt(x, cy, z)) return true;
+          return false;
+        };
+        open = (x, z) => !blocked(x, z);
+      } else {
+        open = (x, z) => !suffocatesAt(x, by, z) && !suffocatesAt(x, by + 1, z);
+        blocked = this.verLessThan("1.13") || !player.swimming ? (x, z) => !open(x, z) : (x, z) => suffocatesAt(x, by, z);
+      }
+    }
+    const speed = this.verLessThan("1.14") ? Math.fround(0.1) : 0.1;
+    for (const [ox, oz] of corners) {
+      const x = player.pos.x + ox;
+      const z = player.pos.z + oz;
+      const bx = Math.floor(x);
+      const bz = Math.floor(z);
+      if (!blocked(bx, bz)) continue;
+      const dx = x - bx;
+      const dz = z - bz;
+      let side: [number, number] | null = null;
+      let best = this.verLessThan("1.16") ? 9999.0 : Number.MAX_VALUE;
+      for (const [sx, sz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const coord = sx !== 0 ? dx : dz;
+        const distance = sx > 0 || sz > 0 ? 1.0 - coord : coord;
+        if (distance < best && open(bx + sx, bz + sz)) {
+          best = distance;
+          side = [sx, sz];
+        }
+      }
+      if (side == null) continue;
+      if (side[0] !== 0) player.vel.x = speed * side[0];
+      else player.vel.z = speed * side[1];
+    }
+  }
+
+  /**
+   * Whether a block suffocates: before 1.14 a normal cube (opaque, a full cube, no redstone power source); since,
+   * BlockState.isSuffocating, a full collision cube except glass, leaves, grates and mangrove roots, and since 1.16 also
+   * farmland, soul sand, dirt paths and mud.
+   */
+  private isSuffocating(block: Block | null): boolean {
+    if (block == null) return false;
+    const fullCube = block.shapes.length === 1 && block.shapes[0].every((v, i) => v === (i < 3 ? 0 : 1));
+    if (this.verLessThan("1.14")) return fullCube && !block.transparent && block.name !== "redstone_block" && block.name !== "observer";
+    if (/glass$|_leaves$|copper_grate$|^mangrove_roots$|^moving_piston$/.test(block.name)) return false;
+    if (!this.verLessThan("1.16") && ["farmland", "soul_sand", "dirt_path", "grass_path", "mud"].includes(block.name)) return true;
+    return fullCube;
   }
 
   /**
