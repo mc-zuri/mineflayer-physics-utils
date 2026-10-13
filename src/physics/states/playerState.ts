@@ -343,7 +343,8 @@ export class PlayerState implements IEntityState {
         this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, boots);
         this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantmentsOf("legs"));
 
-        this.pose = getPose(bot.entity);
+        // the pose the engine left on the bot (the client decides its own pose), else the synced one
+        this.pose = (bot.entity as Entity & { pose?: PlayerPoses }).pose ?? getPose(bot.entity);
         this.gameMode = bot.game.gameMode;
         this.food = bot.food;
 
@@ -410,7 +411,7 @@ export class PlayerState implements IEntityState {
         bot.entity.width = this.halfWidth * 2;
         (bot.entity as any).eyeHeight = this.eyeHeight;
 
-        Object.assign(bot.entity, this.pose)
+        (bot.entity as Entity & { pose?: PlayerPoses }).pose = this.pose;
         bot.game.gameMode = this.gameMode; // this should never actually be in charge.
         bot.food = this.food; // this should also never actually be in charge.
 

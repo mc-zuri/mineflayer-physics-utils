@@ -798,8 +798,9 @@ export class BotcraftPhysics implements IPhysics {
 
 
       // Refresh pose before movement so the first fall-flying tick uses the
-      // correct collider instead of the standing bounding box.
-      if (this.verGreaterThan("1.13.2")) {
+      // correct collider instead of the standing bounding box. Not before 1.17: vanilla changes the pose only in
+      // Player.updatePlayerPose at the end of the tick, and the kept box shows when it was refitted.
+      if (this.verGreaterThan("1.13.2") && !this.verLessThan("1.17")) {
         this.updatePoses(ctx, world);
       }
 
