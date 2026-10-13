@@ -1577,7 +1577,7 @@ export class BotcraftPhysics implements IPhysics {
 
         if (this.verGreaterThan("1.12.2")) {
           if (player.dolphinsGrace > 0) {
-            waterSlowDown = 0.96; // magic number
+            waterSlowDown = Math.fround(0.96); // 0.96F
           }
         }
 
