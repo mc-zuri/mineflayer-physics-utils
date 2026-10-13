@@ -767,11 +767,8 @@ export class BotcraftPhysics implements IPhysics {
 
     // console.log('should stop', this.shouldStopRunSprinting(ctx, heading), 'minor collision', player.isCollidedHorizontallyMinor)
     // Stop sprinting if necessary
+    // (releasing the sprint key does not stop a sprint)
     if (player.sprinting) {
-      if (!player.control.sprint) {
-        this.setSprinting(ctx, false);
-      }
-
       if (this.isSwimming(ctx)) {
         if (this.shouldStopSwimSprinting(ctx, heading)) {
           this.setSprinting(ctx, false);
