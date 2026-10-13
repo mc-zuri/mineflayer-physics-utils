@@ -1003,32 +1003,8 @@ export class BotcraftPhysics implements IPhysics {
       });
     }
 
-    // --- SPEED EFFECT ---
-    const SPEED_UUID = "91AEAA56-376B-4498-935B-2F7F68070635";
-    attribute = attributes.deleteAttributeModifier(attribute, SPEED_UUID);
-    
-    const speedLevel = this.getEffectLevel(CheapEffects.SPEED, entity.state.effects);
-    if (speedLevel > 0) {
-      attribute = attributes.addAttributeModifier(attribute, {
-        uuid: SPEED_UUID,
-        // Truncate the 0.2 first, then multiply, then truncate again (how Java float math works)
-        amount: Math.fround(Math.fround(0.2) * speedLevel),
-        operation: 2,
-      });
-    }
-
-    // --- SLOWNESS EFFECT ---
-    const SLOWNESS_UUID = "7107DE5E-7CE8-4030-940E-514C1F160890";
-    attribute = attributes.deleteAttributeModifier(attribute, SLOWNESS_UUID);
-    
-    const slownessLevel = this.getEffectLevel(CheapEffects.SLOWNESS, entity.state.effects);
-    if (slownessLevel > 0) {
-      attribute = attributes.addAttributeModifier(attribute, {
-        uuid: SLOWNESS_UUID,
-        amount: Math.fround(Math.fround(-0.15) * slownessLevel),
-        operation: 2,
-      });
-    }
+    // The speed and slowness effects are not applied here: like vanilla's client, the engine takes their modifiers
+    // from the movement speed the server synced (the server adds them with the effect).
 
     // Calculate the final speed and cast the entire result to a 32-bit float
     const attributeSpeed = Math.fround(attributes.getAttributeValue(attribute));
