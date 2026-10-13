@@ -103,6 +103,8 @@ export class PlayerState implements IEntityState {
     public isUnderLava: boolean = false;
     public isInWeb: boolean = false;
     public validElytraEquipped: boolean = false;
+    /** PowderSnowBlock.canEntityWalkOnPowderSnow: leather boots on the feet. */
+    public canWalkOnPowderSnow: boolean = false;
     public fireworkRocketDuration: number = 0;
     /** How many rockets fly attached to the player this tick, each boosting it (0: one while the duration runs). */
     public fireworkRockets: number = 0;
@@ -287,6 +289,7 @@ export class PlayerState implements IEntityState {
         this.isUnderLava = (bot.entity as any).isUnderLava;
         this.isInWeb = (bot.entity as any).isInWeb;
         this.validElytraEquipped = isUsableElytraItem(bot.inventory.slots[bot.getEquipmentDestSlot('torso')]);
+        this.canWalkOnPowderSnow = bot.inventory.slots[bot.getEquipmentDestSlot('feet')]?.name === 'leather_boots';
         this.fireworkRocketDuration = bot.fireworkRocketDuration;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
@@ -444,6 +447,7 @@ export class PlayerState implements IEntityState {
         tmp.isUnderLava = this.isUnderLava;
         tmp.isInWeb = this.isInWeb;
         tmp.validElytraEquipped = this.validElytraEquipped;
+        tmp.canWalkOnPowderSnow = this.canWalkOnPowderSnow;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
         tmp.fireworkRockets = this.fireworkRockets;
         tmp.fireworkRocketsBeforePlayer = this.fireworkRocketsBeforePlayer;
@@ -523,6 +527,7 @@ export class PlayerState implements IEntityState {
         this.isUnderLava = other.isUnderLava;
         this.isInWeb = other.isInWeb;
         this.validElytraEquipped = other.validElytraEquipped;
+        this.canWalkOnPowderSnow = other.canWalkOnPowderSnow;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.fireworkRockets = other.fireworkRockets;
         this.fireworkRocketsBeforePlayer = other.fireworkRocketsBeforePlayer;

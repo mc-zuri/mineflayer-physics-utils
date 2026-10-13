@@ -205,7 +205,7 @@ export class BotcraftPhysics implements IPhysics {
   /** The block's collision shapes where it is, for the player simulated. */
   private collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
     if (block.type === this.scaffoldId && this.collider) return this.scaffoldingShapes(block, this.collider) as AABBPoints[];
-    if (block.type === this.powderSnowId && this.collider) return this.powderSnowShapes(this.collider) as AABBPoints[];
+    if (block.type === this.powderSnowId && this.collider) return this.powderSnowShapes(pos, this.collider) as AABBPoints[];
     const maxOffset = this.offsetBlocks.get(block.type);
     if (maxOffset == null) return block.shapes as AABBPoints[];
     // minecraft-data's shapes carry the offset of the column at x 0, z 0
@@ -232,11 +232,14 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
-   * PowderSnowBlock.getCollisionShape (1.17+): 0.9F tall to an entity whose fall distance is over 2.5; nothing to a
-   * player without leather boots otherwise.
+   * PowderSnowBlock.getCollisionShape (1.17+): 0.9F tall to an entity whose fall distance is over 2.5; a full block to
+   * a player in leather boots whose feet are above it (y > top - 1e-5F) and that is not descending (sneaking);
+   * else nothing.
    */
-  private powderSnowShapes(player: PlayerState): Block["shapes"] {
-    return player.fallDistance > 2.5 ? [[0, 0, 0, 1, 0.8999999761581421, 1]] : [];
+  private powderSnowShapes(pos: Vec3, player: PlayerState): Block["shapes"] {
+    if (player.fallDistance > 2.5) return [[0, 0, 0, 1, 0.8999999761581421, 1]];
+    const above = player.pos.y > pos.y + 1 - 9.999999747378752e-6;
+    return player.canWalkOnPowderSnow && above && !player.control.sneak ? [[0, 0, 0, 1, 1, 1]] : [];
   }
 
   /**
