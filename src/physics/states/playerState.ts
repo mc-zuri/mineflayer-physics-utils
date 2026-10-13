@@ -15,7 +15,7 @@ import {
 // import { bot.entity } from "prismarine-entity";
 import md from "minecraft-data";
 import { ControlStateHandler } from "../player/playerControls";
-import { IEntityState } from "./iEntityState";
+import { IEntityState, NearbyEntity } from "./iEntityState";
 import { IPhysics } from "../engines/IPhysics";
 import type { Entity } from "prismarine-entity";
 import { PlayerPoses, getCollider, playerPoseCtx } from "./poses";
@@ -111,6 +111,8 @@ export class PlayerState implements IEntityState {
      */
     public keptBoundingBox: { bb: AABB; pos: Vec3; width: number; height: number } | null = null;
     public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
+    /** The other entities near the player (input only): the boats and shulkers it collides with, the mobs that push it. */
+    public nearbyEntities: NearbyEntity[] = [];
 
     public jumpTicks: number = 0;
     public jumpQueued: boolean = false;
@@ -433,6 +435,7 @@ export class PlayerState implements IEntityState {
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
         tmp.keptBoundingBox = this.keptBoundingBox;
+        tmp.nearbyEntities = this.nearbyEntities;
 
         tmp.sneakCollision = false; //TODO
 
@@ -506,6 +509,7 @@ export class PlayerState implements IEntityState {
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
         this.keptBoundingBox = other.keptBoundingBox;
+        this.nearbyEntities = other.nearbyEntities;
 
         this.sneakCollision = false; //TODO
 

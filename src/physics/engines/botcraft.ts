@@ -30,6 +30,9 @@ type World = { getBlock: world.WorldSync["getBlock"]};
 
 const COLLISION_EPSILON = 1e-7;
 
+/** Boats, chest boats and rafts: "boat" before 1.21.2, then one type per wood ("oak_boat", "bamboo_chest_raft"). */
+const isBoatName = (name: string) => /(^|_)(boat|raft)$/.test(name);
+
 
 function extractAttribute(ctx: IPhysics, genericName: string) {
   const data = ctx.data.attributesByName[genericName] as any;
@@ -303,7 +306,45 @@ export class BotcraftPhysics implements IPhysics {
     // originally: https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L325
     if (playerFlag) {
       this.localPlayerAIStep(ctx, world);
+      this.pushByNearbyEntities(ctx.state as PlayerState);
     }
+  }
+
+  /**
+   * The other entities tick after the local player and push it (1.9+; on the client they push only the local player,
+   * EntitySelector.pushableBy): a mob whose box meets the player's (LivingEntity.pushEntities), a boat whose box grown
+   * by 0.2, -0.01, 0.2 meets it while the player's feet are not above the boat's (Boat.tick, Boat.push). The player,
+   * if pushable (alive, not a spectator, not on a climbable), gets Entity.push away from the other's centre.
+   */
+  private pushByNearbyEntities(player: PlayerState) {
+    if (this.verLessThan("1.9") || player.gameMode === "spectator" || player.onClimbable) return;
+    const box = player.getBB();
+    for (const other of player.nearbyEntities) {
+      const { minX, minY, minZ, maxX, maxY, maxZ } = other.boundingBox;
+      if (isBoatName(other.name)) {
+        const reach = new AABB(minX, minY, minZ, maxX, maxY, maxZ).expand(0.20000000298023224, -0.009999999776482582, 0.20000000298023224);
+        if (!box.intersects(reach) || box.minY > minY) continue;
+      } else if (!other.living || !box.intersects(other.boundingBox)) {
+        continue;
+      }
+      this.pushAwayFrom(player, other.position);
+    }
+  }
+
+  /** Entity.push: 0.05 away from the other's centre, the square root of the larger axis distance in float before 1.17. */
+  private pushAwayFrom(player: PlayerState, other: Vec3) {
+    let dx = other.x - player.pos.x;
+    let dz = other.z - player.pos.z;
+    let distance = Math.max(Math.abs(dx), Math.abs(dz));
+    if (distance < 0.009999999776482582) return;
+    distance = this.verLessThan("1.17") ? Math.fround(Math.sqrt(distance)) : Math.sqrt(distance);
+    dx /= distance;
+    dz /= distance;
+    const scale = Math.min(1.0 / distance, 1.0);
+    dx = dx * scale * 0.05000000074505806;
+    dz = dz * scale * 0.05000000074505806;
+    player.vel.x += -dx;
+    player.vel.z += -dz;
   }
 
   /**

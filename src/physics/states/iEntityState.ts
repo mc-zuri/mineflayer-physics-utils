@@ -49,3 +49,15 @@ export interface IEntityState {
 
   getBB(): AABB;
 }
+
+/**
+ * Another entity near the player, as the client holds it when the player ticks: its vanilla type name ("cow",
+ * "oak_boat"; "boat" before 1.21.2), whether it is a LivingEntity (mobs and other players), its position and its
+ * bounding box.
+ */
+export interface NearbyEntity {
+  name: string;
+  living: boolean;
+  position: Vec3;
+  boundingBox: AABB;
+}
