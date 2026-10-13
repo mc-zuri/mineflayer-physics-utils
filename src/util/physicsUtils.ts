@@ -90,7 +90,7 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
             dolphinsGraceEffectName: "DolphinsGrace",
             slowFallingEffectName: "SlowFalling",
             levitationEffectName: "Levitation",
-            blindnessEffectName: "Blindnesss"
+            blindnessEffectName: "Blindness"
 
         };
     } else {
@@ -101,7 +101,7 @@ export function getStatusEffectNamesForVersion(supportFeature: SupportFeature) {
             dolphinsGraceEffectName: "DolphinsGrace",
             slowFallingEffectName: "SlowFalling",
             levitationEffectName: "Levitation",
-            blindnessEffectName: "Blindnesss"
+            blindnessEffectName: "Blindness"
         };
     }
 }

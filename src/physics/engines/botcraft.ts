@@ -783,7 +783,8 @@ export class BotcraftPhysics implements IPhysics {
 
   private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
     const player = ctx.state as PlayerState;
-    return player.blindness > 0 ||
+    // (blindness stops a sprint from 1.21.4; before, it only keeps one from starting)
+    return (this.verGreaterThan("1.21.3") && player.blindness > 0) ||
       //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
       heading.forward < 1e-5 ||
       !this.hasEnoughFoodToSprint(ctx) ||

@@ -296,6 +296,7 @@ export class PlayerState implements IEntityState {
         this.dolphinsGrace = this.ctx.getEffectLevel(CheapEffects.DOLPHINS_GRACE, this.effects);
         this.slowFalling = this.ctx.getEffectLevel(CheapEffects.SLOW_FALLING, this.effects);
         this.levitation = this.ctx.getEffectLevel(CheapEffects.LEVITATION, this.effects);
+        this.blindness = this.ctx.getEffectLevel(CheapEffects.BLINDNESS, this.effects);
 
 
         // armour enchantments
