@@ -1441,7 +1441,22 @@ export class BotcraftPhysics implements IPhysics {
         const initY = player.pos.y;
         this.applyInputs(Math.fround(0.02), player);
         this.applyMovement(ctx, world);
-        player.vel.scale(0.5);
+        const fluidJumpThreshold = Math.fround(player.eyeHeight) < 0.4 ? 0.0 : 0.4;
+        if (!this.verLessThan("1.16") && player.lavaHeight <= fluidJumpThreshold) {
+          // shallow lava (1.16+): the water's vertical drag and falling adjustment, half the horizontal speed
+          player.vel.x *= 0.5;
+          player.vel.y *= 0.800000011920929;
+          player.vel.z *= 0.5;
+          if (!player.sprinting && gravity !== 0.0) {
+            if (goingDown && Math.abs(player.vel.y - 0.005) >= 0.003 && Math.abs(player.vel.y - gravity / 16.0) < 0.003) {
+              player.vel.y = -0.003;
+            } else {
+              player.vel.y -= gravity / 16.0;
+            }
+          }
+        } else {
+          player.vel.scale(0.5);
+        }
         player.vel.y -= ctx.lavaGravity;
 
         const bb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
