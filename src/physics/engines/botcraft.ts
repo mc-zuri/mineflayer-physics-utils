@@ -485,7 +485,9 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   private updateSwimming(player: PlayerState, world: World) {
-    if (player.flying) {
+    if (this.verLessThan("1.13")) {
+      player.swimming = false; // swimming came with 1.13
+    } else if (player.flying) {
       player.swimming = false;
     } else if (player.swimming) {
       player.swimming = player.sprinting && player.isInWater;
