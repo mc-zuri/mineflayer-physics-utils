@@ -556,8 +556,8 @@ export class BotcraftPhysics implements IPhysics {
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx, heading, world);
 
-    // If sneaking in water, add downward speed
-    if (player.isInWater && player.control.sneak && !player.flying) {
+    // If sneaking in water, add downward speed (LocalPlayer.goDownInWater, 1.13+)
+    if (player.isInWater && player.control.sneak && !player.flying && !this.verLessThan("1.13")) {
       player.vel.y -= 0.03999999910593033;
     }
 
