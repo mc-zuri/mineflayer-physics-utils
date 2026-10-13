@@ -898,9 +898,10 @@ export class BotcraftPhysics implements IPhysics {
     //        player.vehicle.isLocalInstanceAuthoritative;
   }
 
+  /** Entity.isSwimming: the swimming flag updateSwimming keeps, not whether the player is under water. */
   private isSwimming(ctx: EPhysicsCtx): boolean {
     const player = ctx.state as PlayerState;
-    return player.isInWater && player.isUnderWater;
+    return player.swimming;
   }
 
   private handleFallFlyingCollisions(player: PlayerState, previousHorizontalSpeed: number) {
