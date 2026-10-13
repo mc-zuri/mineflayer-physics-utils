@@ -642,20 +642,23 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     // Apply slow down to player inputs when moving slowly
+    // the impulses are floats: (float)(impulse * factor)
     if (isMovingSlowly) {
-      let sneakCoefficient: number;
-
-      if (this.verLessThan("1.19")) {
-        sneakCoefficient = 0.3;
-      } else if (this.verLessThan("1.21")) {
-        sneakCoefficient = 0.3 + player.swiftSneak * 0.15;
-        sneakCoefficient = Math.min(Math.max(0.0, sneakCoefficient), 1.0);
-      } else {
-        sneakCoefficient = player.attributes?.sneakingSpeed?.value ?? 0.3; // TODO: this shouldn't be happening!
-      }
-      heading.forward *= sneakCoefficient;
-      heading.strafe *= sneakCoefficient;
+      const factor = this.sneakingSpeedFactor(player);
+      heading.forward = Math.fround(heading.forward * factor);
+      heading.strafe = Math.fround(heading.strafe * factor);
     }
+  }
+
+  /**
+   * The factor of the sneak slowdown: before 1.19 KeyboardInput's 0.3D; 1.19 - 1.20 the float
+   * Mth.clamp(0.3F + 0.15F * swift sneak level, 0F, 1F); since, the sneaking speed attribute as a float.
+   */
+  private sneakingSpeedFactor(player: PlayerState): number {
+    const f32 = Math.fround;
+    if (this.verLessThan("1.19")) return 0.3;
+    if (this.verLessThan("1.21")) return Math.min(Math.max(f32(f32(0.3) + f32(player.swiftSneak * f32(0.15))), 0), 1);
+    return f32(player.attributes?.sneakingSpeed?.value ?? 0.3); // TODO: this shouldn't be happening!
   }
 
   private isSwimmingAndNotFlying(ctx: EPhysicsCtx, world: World): boolean {
