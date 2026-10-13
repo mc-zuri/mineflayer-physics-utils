@@ -50,7 +50,10 @@ export function checkAttributeModifier(attributes: Attribute, uuid: string) {
 
 export function deleteAttributeModifier(attributes: Attribute, uuid: string) {
     for (const modifier of attributes.modifiers) {
-        if (modifier.uuid === uuid) attributes.modifiers.splice(attributes.modifiers.indexOf(modifier));
+        if (modifier.uuid === uuid) {
+            attributes.modifiers.splice(attributes.modifiers.indexOf(modifier), 1);
+            break;
+        }
     }
     return attributes;
 }
