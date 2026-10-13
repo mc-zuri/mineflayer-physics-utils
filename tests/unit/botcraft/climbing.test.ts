@@ -5,10 +5,10 @@ import { createBotcraftPlayerRig, createFlatWorld, loadMcData } from "../../help
 
 // The recorder's climbing area: a column of climbable blocks at x 5 from y 101 up, against a stone wall at x 6, the
 // player starting at its foot (5.5, 101, z) facing it (yaw 270).
-function climbRig(version: string, z: number, column: Array<[string, Record<string, string>]>) {
+function climbRig(version: string, z: number, column: Array<[string, Record<string, string>]>, position = new Vec3(5.5, 101, z)) {
   const { Block } = loadMcData(version);
   const world = createFlatWorld(version, 101);
-  const rig = createBotcraftPlayerRig({ version, position: new Vec3(5.5, 101, z) });
+  const rig = createBotcraftPlayerRig({ version, position, groundLevel: 101 });
   column.forEach(([name, properties], i) => {
     const block = Block.fromProperties(name, properties, 0);
     world.setOverrideBlock(new Vec3(5, 101 + i, Math.floor(z)), block.type, block.metadata);
@@ -47,6 +47,23 @@ describe("Botcraft climbing", () => {
       tick();
       expect(state.pos.y).toBe(101.7531999805212);
       expect(state.vel.y).toBe(0.24813599859094576);
+    });
+  }
+
+  // LivingEntity.travel holds a fall on a climbable block at -0.15: the double before 1.14, 0.15F since.
+  const slideDown: Array<[string, number, number]> = [
+    ["1.12.2", 102.3711158959856, -0.22540000438690183],
+    ["1.13.2", 102.3711158959856, -0.22540000438690183],
+    ["1.20.4", 102.37111589002514, -0.22540001022815717],
+    ["1.21.11", 102.37111589002514, -0.22540001022815717],
+  ];
+  for (const [version, y, vy] of slideDown) {
+    it(`holds the slide down a vine at -0.15 (${version}, b_climb_slide_down_vine[east=true] tick 45)`, () => {
+      const { state, tick } = climbRig(version, 1761.5, vine(5), new Vec3(5.699999988079071, 102.5211158959856, 1761.5));
+      state.vel.set(0, -0.19584632128587792, 0);
+      tick();
+      expect(state.pos.y).toBe(y);
+      expect(state.vel.y).toBe(vy);
     });
   }
 });
