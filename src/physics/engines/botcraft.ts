@@ -2268,6 +2268,7 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
     }
+    colliders.push(...this.worldBorderColliders(bb, query));
 
     const horizontalSqr = (vec: Vec3) => vec.x * vec.x + vec.z * vec.z;
     for (const height of [...heights].sort((a, b) => a - b)) {
@@ -2279,10 +2280,44 @@ export class BotcraftPhysics implements IPhysics {
     return collided;
   }
 
+  /**
+   * The world border as colliders (1.14+): everything outside the default border (centre 0, 0, size 5.9999968E7; the
+   * engine does not know the server's), from the block-aligned bounds. 1.14 - 1.17 (Entity.collide) add it unless the
+   * box, deflated by 1e-7, already reaches outside; 1.18+ (Entity.collectColliders) when the entity is inside and
+   * close to it (WorldBorder.isInsideCloseToBorder of the swept box).
+   */
+  private worldBorderColliders(bb: AABB, query: AABB): AABB[] {
+    if (this.verLessThan("1.14")) return [];
+    const size = 5.9999968e7;
+    const minX = Math.floor(Math.max(-size / 2, -29999984));
+    const maxX = Math.ceil(Math.min(size / 2, 29999984));
+    const minZ = minX;
+    const maxZ = maxX;
+    if (this.verLessThan("1.18")) {
+      const e = 1e-7;
+      if (bb.minX + e < minX || bb.maxX - e > maxX || bb.minZ + e < minZ || bb.maxZ - e > maxZ) return [];
+    } else {
+      const entity = this.collider;
+      if (entity == null) return [];
+      const margin = Math.max(Math.max(query.maxX - query.minX, query.maxZ - query.minZ), 1.0);
+      const { x, z } = entity.pos;
+      const distance = Math.min(x - minX, maxX - x, z - minZ, maxZ - z);
+      const within = x > minX - margin && x < maxX + margin && z > minZ - margin && z < maxZ + margin;
+      if (!(distance < margin * 2.0 && within)) return [];
+    }
+    const inf = Infinity;
+    return [
+      new AABB(-inf, -inf, -inf, minX, inf, inf),
+      new AABB(maxX, -inf, -inf, inf, inf, inf),
+      new AABB(-inf, -inf, -inf, inf, inf, minZ),
+      new AABB(-inf, -inf, maxZ, inf, inf, inf),
+    ];
+  }
+
   collideBoundingBox(world: World, bb: AABB, movement: Vec3, colliders: AABB[] = []): Vec3 {
     const queryBB = bb.expandTowards(movement);
 
-    const combinedColliders = [...colliders];
+    const combinedColliders = [...colliders, ...this.worldBorderColliders(bb, queryBB)];
 
     const blockCollisions = this.getSurroundingBBs(queryBB, world);
     for (const block of blockCollisions) {
