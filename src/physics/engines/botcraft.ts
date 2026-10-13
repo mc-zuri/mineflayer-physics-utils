@@ -576,9 +576,13 @@ export class BotcraftPhysics implements IPhysics {
 
       this.inputsToJump(player, world, ctx.worldSettings);
 
-      // LivingEntity.aiStep: xxa and zza are floats, scaled by 0.98F. forward-axis is forward, left-axis = strafe.
-      heading.forward = Math.fround(heading.forward * Math.fround(0.98));
-      heading.strafe = Math.fround(heading.strafe * Math.fround(0.98));
+      if (this.verGreaterThan("1.21.4")) {
+        this.modifyInput(ctx, heading, world);
+      } else {
+        // LivingEntity.aiStep: xxa and zza are floats, scaled by 0.98F. forward-axis is forward, left-axis = strafe.
+        heading.forward = Math.fround(heading.forward * Math.fround(0.98));
+        heading.strafe = Math.fround(heading.strafe * Math.fround(0.98));
+      }
 
       // Compensate water downward speed depending on looking direction (?)
 
@@ -656,6 +660,15 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
+    // 1.21.5+: KeyboardInput.tick's move vector is normalized; the slowdowns come in LocalPlayer.modifyInput
+    if (this.verGreaterThan("1.21.4")) {
+      const f32 = Math.fround;
+      const length = f32(Math.sqrt(f32(f32(heading.strafe * heading.strafe) + f32(heading.forward * heading.forward))));
+      heading.strafe = length < f32(1.0e-4) ? 0 : f32(heading.strafe / length);
+      heading.forward = length < f32(1.0e-4) ? 0 : f32(heading.forward / length);
+      return;
+    }
+
     // Apply slow down to player inputs when moving slowly
     // the impulses are floats: (float)(impulse * factor)
     if (isMovingSlowly) {
@@ -663,6 +676,36 @@ export class BotcraftPhysics implements IPhysics {
       heading.forward = Math.fround(heading.forward * factor);
       heading.strafe = Math.fround(heading.strafe * factor);
     }
+  }
+
+  /**
+   * 1.21.5+ LocalPlayer.modifyInput, the float move vector: scaled by 0.98F and the sneak slowdown, then stretched
+   * towards the unit square (modifyInputSpeedForSquareMovement), so a diagonal is as fast as a straight move.
+   */
+  private modifyInput(ctx: EPhysicsCtx, heading: Heading, world: World) {
+    const f32 = Math.fround;
+    const player = ctx.state as PlayerState;
+    let x = heading.strafe;
+    let y = heading.forward;
+    if (f32(f32(x * x) + f32(y * y)) === 0) return;
+    const scale = (factor: number) => {
+      x = f32(x * factor);
+      y = f32(y * factor);
+    };
+    scale(f32(0.98));
+    if (this.isMovingSlowly(ctx, world)) scale(this.sneakingSpeedFactor(player));
+
+    const length = f32(Math.sqrt(f32(f32(x * x) + f32(y * y))));
+    if (length > 0) {
+      scale(f32(1 / length));
+      const absX = Math.abs(x);
+      const absY = Math.abs(y);
+      const ratio = absY > absX ? f32(absX / absY) : f32(absY / absX);
+      const toUnitSquare = f32(Math.sqrt(f32(1 + f32(ratio * ratio))));
+      scale(Math.min(f32(length * toUnitSquare), 1));
+    }
+    heading.strafe = x;
+    heading.forward = y;
   }
 
   /**
@@ -709,8 +752,8 @@ export class BotcraftPhysics implements IPhysics {
     const player = ctx.state as PlayerState;
 
     // console.log('is sprinting', player.sprinting, 'can sprint', this.canStartSprinting(ctx, heading), player.sprinting)
-    if (this.canStartSprinting(ctx, heading) &&
-      (player.control.sprint || (player.sprintTriggerTime > 0 && heading.forward >= (player.isInWater ? 1e-5 : 0.8)))) {
+    if (this.canStartSprinting(ctx, heading, world) &&
+      (player.control.sprint || (player.sprintTriggerTime > 0 && this.hasEnoughImpulseToStartSprinting(player, heading)))) {
       this.setSprinting(ctx, true);
     }
 
@@ -731,17 +774,25 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-  private canStartSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
+  private canStartSprinting(ctx: EPhysicsCtx, heading: Heading, world: World): boolean {
     const player = ctx.state as PlayerState;
+    // 1.21.5+ the impulse is no longer slowed when this is checked, so crawling keeps a sprint from starting too
+    const movingSlowly = this.verGreaterThan("1.21.4") ? this.isMovingSlowly(ctx, world) : player.crouching;
     return !player.sprinting &&
-      heading.forward >= (player.isInWater ? 1e-5 : 0.8) &&
+      this.hasEnoughImpulseToStartSprinting(player, heading) &&
       this.hasEnoughFoodToSprint(ctx) &&
       !player.isUsingItem &&
       !player.blindness &&
       //  (!player.isPassenger || this.vehicleCanSprint(ctx)) &&
       (!player.fallFlying || player.isUnderWater) &&
-      (!player.crouching || player.isUnderWater) &&
+      (!movingSlowly || player.isUnderWater) &&
       (!player.isInWater || player.isUnderWater);
+  }
+
+  // 1.21.5+ any forward impulse (ClientInput.hasForwardImpulse, of the normalized move vector); before, 0.8 out of water
+  private hasEnoughImpulseToStartSprinting(player: PlayerState, heading: Heading): boolean {
+    if (this.verGreaterThan("1.21.4")) return heading.forward > 1e-5;
+    return heading.forward >= (player.isInWater ? 1e-5 : 0.8);
   }
 
   private hasEnoughFoodToSprint(ctx: EPhysicsCtx): boolean {
