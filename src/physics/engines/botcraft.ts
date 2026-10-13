@@ -926,6 +926,22 @@ export class BotcraftPhysics implements IPhysics {
     return 1.0;
   }
 
+  /**
+   * The ground speed for a block's friction, in float as vanilla computes it. 1.14+:
+   * LivingEntity.getFrictionInfluencedSpeed, speed * (0.21600002F / (f * f * f)). Before, travel scaled the friction
+   * by 0.91F first: speed * (0.16277136F / (s * s * s)), the constant 0.16277137F in 1.13.
+   */
+  private getFrictionInfluencedSpeed(movementSpeed: number, friction: number) {
+    const f32 = Math.fround;
+    if (this.verLessThan("1.14")) {
+      const s = f32(f32(friction) * f32(0.91));
+      const constant = f32(this.verLessThan("1.13") ? 0.16277136 : 0.16277137);
+      return f32(movementSpeed * f32(constant / f32(f32(s * s) * s)));
+    }
+    const f = f32(friction);
+    return f32(movementSpeed * f32(f32(0.21600002) / f32(f32(f * f) * f)));
+  }
+
   private getOffGroundSpeed(player: PlayerState) {
     if (player.flying) {
       return player.sprinting ? player.flySpeed * 2.0 : player.flySpeed;
@@ -1156,7 +1172,7 @@ export class BotcraftPhysics implements IPhysics {
 
         let inputStrength: number;
         if (player.lastOnGround) {
-          inputStrength = movementSpeedAttr * (0.21600002 / (friction * friction * friction));
+          inputStrength = this.getFrictionInfluencedSpeed(movementSpeedAttr, friction);
         } else {
           inputStrength = this.getOffGroundSpeed(player);
         }
