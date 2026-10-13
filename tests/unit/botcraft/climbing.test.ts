@@ -79,4 +79,23 @@ describe("Botcraft climbing", () => {
       expect(state.vel.y).toBe(0.11760000228881837);
     });
   }
+
+  // BlockTags.CLIMBABLE takes in the nether vines (1.16) and the cave vines (1.17), the tip block and the plant above.
+  const vines: Array<[string, number, string, Record<string, string>]> = [
+    ["twisting_vines", 1769.5, "twisting_vines_plant", {}],
+    ["weeping_vines", 1773.5, "weeping_vines", { age: "0" }],
+    ["cave_vines", 1777.5, "cave_vines", { age: "0", berries: "false" }],
+  ];
+  for (const version of ["1.20.4", "1.21.11"]) {
+    for (const [name, z, bottom, properties] of vines) {
+      it(`climbs ${name} (${version}, b_climb_jump_up_${name})`, () => {
+        const plant: [string, Record<string, string>] = [`${name}_plant`, name === "cave_vines" ? { berries: "false" } : {}];
+        const { state, tick } = climbRig(version, z, [[bottom, properties], plant, plant, plant, plant]);
+        state.control.jump = true;
+        tick();
+        expect(state.pos.y).toBe(101.41999998688698);
+        expect(state.vel.y).toBe(0.11760000228881837);
+      });
+    }
+  }
 });

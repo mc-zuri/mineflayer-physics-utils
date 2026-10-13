@@ -71,6 +71,7 @@ export class BotcraftPhysics implements IPhysics {
   protected ladderId: number;
   protected vineId: number;
   protected scaffoldId: number;
+  protected climbableIds: Set<number>;
   protected bubblecolumnId: number;
   protected airId: number;
   protected waterLike: Set<number>;
@@ -113,6 +114,10 @@ export class BotcraftPhysics implements IPhysics {
     this.lavaId = blocksByName.lava.id;
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
+    // BlockTags.CLIMBABLE (1.16+; ladder, vine and scaffolding before): each block from the version that adds it
+    const climbables = ["ladder", "vine", "scaffolding", "weeping_vines", "weeping_vines_plant", "twisting_vines",
+      "twisting_vines_plant", "cave_vines", "cave_vines_plant"];
+    this.climbableIds = new Set(climbables.filter((name) => blocksByName[name] != null).map((name) => blocksByName[name].id));
     this.airId = blocksByName.air.id;
     this.waterLike = new Set();
     if (blocksByName.seagrass) this.waterLike.add(blocksByName.seagrass.id); // 1.13+
@@ -1861,8 +1866,7 @@ export class BotcraftPhysics implements IPhysics {
     // TODO: if trapdoor AND below block is a ladder with the same facing property
     // as the trapdoor then the trapdoor is a climbable block too
 
-    // TODO: make climbables a set.
-    return feetBlock != null && (this.vineId === feetBlock.type || this.ladderId === feetBlock.type || this.scaffoldId === feetBlock.type);
+    return feetBlock != null && this.climbableIds.has(feetBlock.type);
   }
 
   getSupportingBlockPos(world: World, feetSliceAABB: AABB): Vec3 | null {
