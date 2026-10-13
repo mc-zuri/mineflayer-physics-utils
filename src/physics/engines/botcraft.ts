@@ -598,9 +598,16 @@ export class BotcraftPhysics implements IPhysics {
       player.vel.y -= 0.03999999910593033;
     }
 
+    // LocalPlayer.aiStep: flying up and down by the float flyingSpeed * 3.0F; before 1.14 sneak and jump each apply it
     if (player.flying) {
-      player.vel.y +=
-        (-1 * (player.control.sneak as unknown as number) + (player.control.jump as unknown as number)) * player.flySpeed * 3.0;
+      const impulse = Math.fround(Math.fround(player.flySpeed) * 3.0);
+      if (this.verLessThan("1.14")) {
+        if (player.control.sneak) player.vel.y -= impulse;
+        if (player.control.jump) player.vel.y += impulse;
+      } else {
+        const direction = (player.control.jump ? 1 : 0) - (player.control.sneak ? 1 : 0);
+        if (direction !== 0) player.vel.y += direction * impulse;
+      }
     }
 
     // player::AiStep
