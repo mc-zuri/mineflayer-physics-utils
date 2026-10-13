@@ -1208,10 +1208,40 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
+  /**
+   * The bounding box Entity.move starts from. Before 1.17 vanilla keeps it across ticks and only builds it from the
+   * position in setPos (float half width and height), so the kept box is used while pos is still the position the
+   * engine left with it; a pose of another size refits it as Entity.refreshDimensions (setSize before 1.14) does.
+   */
+  private boundingBoxForMove(player: PlayerState): AABB {
+    const kept = player.keptBoundingBox;
+    if (!this.verLessThan("1.17") || kept == null) return player.getBB();
+    const { bb, pos } = kept;
+    if (pos.x !== player.pos.x || pos.y !== player.pos.y || pos.z !== player.pos.z) return player.getBB();
+    const width = player.halfWidth * 2;
+    const height = player.height;
+    if (width === kept.width && height === kept.height) return bb.clone();
+    if (width < kept.width) return player.getBB();
+    return new AABB(bb.minX, bb.minY, bb.minZ, bb.minX + width, bb.minY + height, bb.minZ + width);
+  }
+
+  /**
+   * Before 1.17 Entity.move moves the bounding box and derives the position from it (setLocationFromBoundingbox); the
+   * box is kept for the next tick either way.
+   */
+  private keepBoundingBox(player: PlayerState, bb: AABB, moved: boolean) {
+    if (moved) player.pos.set((bb.minX + bb.maxX) / 2, bb.minY, (bb.minZ + bb.maxZ) / 2);
+    player.keptBoundingBox = { bb, pos: player.pos.clone(), width: player.halfWidth * 2, height: player.height };
+  }
+
   applyMovement(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     if (player.gameMode === "spectator") {
-      player.pos.translate(player.vel.x, player.vel.y, player.vel.z);
+      if (this.verLessThan("1.17")) {
+        this.keepBoundingBox(player, this.boundingBoxForMove(player).move(player.vel), true);
+      } else {
+        player.pos.translate(player.vel.x, player.vel.y, player.vel.z);
+      }
       if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
       return;
     }
@@ -1266,8 +1296,9 @@ export class BotcraftPhysics implements IPhysics {
     // 1.20.5: this is var2 in entity::move
     const movementBeforeCollisions = movement.clone();
 
+    const boundingBox = this.boundingBoxForMove(player);
     { // Entity::collide
-      const playerAABB = player.getBB();
+      const playerAABB = boundingBox;
       const fuck = playerAABB.clone();
       const hDist = (vec: Vec3) => Math.sqrt(vec.x * vec.x + vec.z * vec.z);
       // const entityCollisions = world.getEntityCollisions(player, playerAABB.expand(movement));
@@ -1322,7 +1353,10 @@ export class BotcraftPhysics implements IPhysics {
       movement = newMovement
     }
     // console.log('after all collision', movement)
-    if (movement.norm() ** 2 > 1e-7) {
+    if (this.verLessThan("1.17")) {
+      const moved = movement.norm() ** 2 > 1e-7;
+      this.keepBoundingBox(player, moved ? boundingBox.move(movement) : boundingBox, moved);
+    } else if (movement.norm() ** 2 > 1e-7) {
       player.pos.add(movement);
     }
 

@@ -103,6 +103,11 @@ export class PlayerState implements IEntityState {
     public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
     public supportingBlockPos: Vec3 | null = null;
+    /**
+     * Before 1.17: the bounding box vanilla keeps across ticks (the engine's last move left it here), with the position
+     * and size it was left with. The engine starts from it while pos is still that position, else builds it from pos.
+     */
+    public keptBoundingBox: { bb: AABB; pos: Vec3; width: number; height: number } | null = null;
     public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
 
     public jumpTicks: number = 0;
@@ -420,6 +425,7 @@ export class PlayerState implements IEntityState {
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
+        tmp.keptBoundingBox = this.keptBoundingBox;
 
         tmp.sneakCollision = false; //TODO
 
@@ -490,6 +496,7 @@ export class PlayerState implements IEntityState {
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
+        this.keptBoundingBox = other.keptBoundingBox;
 
         this.sneakCollision = false; //TODO
 
