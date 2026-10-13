@@ -73,6 +73,8 @@ export class BotcraftPhysics implements IPhysics {
   protected vineId: number;
   protected scaffoldId: number;
   protected climbableIds: Set<number>;
+  /** The player simulated, whose collision context shapes the blocks it collides with (EntityCollisionContext). */
+  private collider: PlayerState | null = null;
   protected bubblecolumnId: number;
   protected airId: number;
   protected waterLike: Set<number>;
@@ -169,7 +171,8 @@ export class BotcraftPhysics implements IPhysics {
           const block = world.getBlock(cursor) as Block | null;
           if (block != null) {
             const blockPos = block.position;
-            for (const shape of block.shapes) {
+            const shapes = block.type === this.scaffoldId && this.collider ? this.scaffoldingShapes(block, this.collider) : block.shapes;
+            for (const shape of shapes) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
               blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
               surroundingBBs.push(blockBB);
@@ -179,6 +182,19 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
     return surroundingBBs;
+  }
+
+  /**
+   * ScaffoldingBlock.getCollisionShape (1.14+): the stable shape (top and legs, minecraft-data's) to a player above the
+   * block that is not descending (sneaking); the bottom slab of a hanging bottom piece to a player above the block
+   * below; else nothing.
+   */
+  private scaffoldingShapes(block: Block, player: PlayerState): number[][] {
+    const y = block.position.y;
+    if (player.pos.y > y + 1 - 9.999999747378752e-6 && !player.control.sneak) return block.shapes;
+    const { distance, bottom } = block.getProperties();
+    const hangingBottom = Number(distance) !== 0 && (bottom === true || bottom === "true");
+    return hangingBottom && player.pos.y > y - 9.999999747378752e-6 ? [[0, 0, 0, 1, 0.125, 1]] : [];
   }
 
   getWaterInBBs(bb: AABB, world: World) {
@@ -2051,7 +2067,12 @@ export class BotcraftPhysics implements IPhysics {
 
   simulate(entity: EPhysicsCtx, world: World): IEntityState {
     entity.state.attributes ??= {}
-    this.physicsTick(entity, world);
+    this.collider = entity.state instanceof PlayerState ? entity.state : null;
+    try {
+      this.physicsTick(entity, world);
+    } finally {
+      this.collider = null;
+    }
     entity.state.age++;
     return entity.state;
   }
