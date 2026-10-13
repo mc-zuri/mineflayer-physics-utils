@@ -1083,6 +1083,7 @@ export class BotcraftPhysics implements IPhysics {
         this.applyInputs(inputStrength, player);
         this.applyMovement(ctx, world);
 
+        player.onClimbable = this.isInClimbable(player, world);
         if (player.isCollidedHorizontally && player.onClimbable) {
           player.vel.y = 0.2;
         }
@@ -1193,6 +1194,8 @@ export class BotcraftPhysics implements IPhysics {
 
         this.applyInputs(inputStrength, player);
 
+        // LivingEntity.onClimbable is looked up where the player is, before the move and again after it
+        player.onClimbable = this.isInClimbable(player, world);
         if (player.onClimbable) {
           // LivingEntity::handleOnClimbable
           player.vel.x = math.clamp(-0.15000000596046448, player.vel.x, 0.15000000596046448); // Math.fround(0.15)
@@ -1205,6 +1208,7 @@ export class BotcraftPhysics implements IPhysics {
         }
 
         this.applyMovement(ctx, world);
+        player.onClimbable = this.isInClimbable(player, world);
 
         // if colliding and in climbable, go up.
         if ((player.isCollidedHorizontally || player.control.jump) && player.onClimbable) {
