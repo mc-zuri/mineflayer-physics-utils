@@ -72,11 +72,12 @@ export function whichHandIsEntityUsingBoolean(entity: Entity, supportFeature: Su
     return (entity.metadata[getMetadataIndex(supportFeature)] as any) > 2;
 }
 
-export function isUsableElytraItem(item: { name?: string; durabilityUsed?: number; maxDurability?: number } | null): boolean {
+/** ElytraItem.isFlyEnabled: damage below the max damage - 1. The elytra's max damage is 432 (minecraft-data 1.20.6 lists 1). */
+const ELYTRA_MAX_DAMAGE = 432;
+
+export function isUsableElytraItem(item: { name?: string; durabilityUsed?: number } | null): boolean {
     if (!item || item.name !== "elytra") return false;
-    if (typeof item.durabilityUsed === "number" && typeof item.maxDurability === "number") {
-        return item.durabilityUsed < item.maxDurability - 1;
-    }
+    if (typeof item.durabilityUsed === "number") return item.durabilityUsed < ELYTRA_MAX_DAMAGE - 1;
     return true;
 }
 
