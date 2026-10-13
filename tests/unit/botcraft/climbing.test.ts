@@ -66,4 +66,17 @@ describe("Botcraft climbing", () => {
       expect(state.vel.y).toBe(vy);
     });
   }
+
+  // Sneaking on a climbable block only stops a slide down: pressed against the wall the climb goes on.
+  for (const version of ["1.12.2", "1.13.2", "1.20.4", "1.21.11"]) {
+    it(`keeps climbing while sneaking (${version}, b_climb_sneak_hold_vine[east=true] tick 29)`, () => {
+      const { state, tick } = climbRig(version, 1761.5, vine(5), new Vec3(5.699999988079071, 101.11760000228882, 1761.5));
+      state.vel.set(0, 0.11760000228881837, 0);
+      state.control.forward = true;
+      state.control.sneak = true;
+      tick();
+      expect(state.pos.y).toBe(101.23520000457765);
+      expect(state.vel.y).toBe(0.11760000228881837);
+    });
+  }
 });

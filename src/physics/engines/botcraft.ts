@@ -1202,8 +1202,9 @@ export class BotcraftPhysics implements IPhysics {
           player.vel.z = math.clamp(-0.15000000596046448, player.vel.z, 0.15000000596046448); // Math.fround(0.15)
           // the fall is held at -0.15F since 1.14, at the double -0.15 before
           player.vel.y = Math.max(this.verLessThan("1.14") ? -0.15 : -0.15000000596046448, player.vel.y);
-          const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-          if (feetBlock && (this.scaffoldId === feetBlock.type) !== player.control.sneak) {
+          // sneaking stops the slide down, but not in scaffolding
+          const feetBlock = world.getBlock(player.pos);
+          if (player.vel.y < 0 && player.control.sneak && feetBlock?.type !== this.scaffoldId) {
             player.vel.y = 0.0;
           }
         }
