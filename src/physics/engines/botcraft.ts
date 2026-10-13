@@ -1043,7 +1043,9 @@ export class BotcraftPhysics implements IPhysics {
 
       if (player.isInWater && !player.flying) {
         const initY = player.pos.y;
-        let waterSlowDown = Math.fround(player.sprinting ? ctx.sprintWaterInertia : ctx.waterInertia);
+        // Sprinting changes water movement since 1.13's sprint swimming (0.9F slowdown, no sinking); before, it does not.
+        const sprintSwims = player.sprinting && !this.verLessThan("1.13");
+        let waterSlowDown = Math.fround(sprintSwims ? ctx.sprintWaterInertia : ctx.waterInertia);
         let inputStrength = Math.fround(0.02);
         let depthStriderMult;
         if (this.verLessThan("1.21")) {
@@ -1080,7 +1082,7 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y *= 0.800000011920929; // magic number, pretty sure this is wrong.
         player.vel.z *= waterSlowDown;
 
-        if (!player.sprinting) {
+        if (!sprintSwims) {
           if (this.verGreaterThan("1.12.2")) {
             if (gravity !== 0.0) {
               if (
