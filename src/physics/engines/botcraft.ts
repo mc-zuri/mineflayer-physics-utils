@@ -497,16 +497,22 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
+  /**
+   * Whether the sneak slowdown applies to this tick's input. 1.15+: LocalPlayer.isMovingSlowly, crouching (taken from
+   * the sneak key of the tick before) or crawling; 1.14's KeyboardInput also slows by the sneak key read this tick.
+   * Before 1.14 MovementInputFromOptions slows by the sneak key of the tick itself.
+   */
   private isMovingSlowly(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     if (this.verGreaterThan("1.13.2")) {
       const visuallyCrawling =
         (player.pose === PlayerPoses.SWIMMING || (!player.fallFlying && player.pose === PlayerPoses.FALL_FLYING)) &&
         !player.isInWater;
+      if (this.verLessThan("1.15") && player.control.sneak) return true;
       return player.crouching || visuallyCrawling;
     }
 
-    return player.crouching;
+    return player.control.sneak;
   }
 
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
