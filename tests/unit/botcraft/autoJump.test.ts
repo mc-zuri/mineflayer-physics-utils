@@ -1,0 +1,46 @@
+import { describe, it } from "mocha";
+import expect from "expect";
+import { Vec3 } from "vec3";
+import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
+
+const groundLevel = 101;
+
+// x_autojump_block: a vanilla client with the auto-jump option walks east on stone towards a one-block step (x 3 - 5).
+// LocalPlayer.updateAutoJump queues a jump after tick 9's move, pressed on tick 10 (run here from tick 8's state).
+const recorded: Record<string, { before: [number, number]; after: [number, number] }> = {
+  "1.12.2": { before: [1.9693212934561402, 0.11692814584565936], after: [2.3996001950695547, 0.1175815317740132] },
+  "1.21.11": { before: [1.9693214940821298, 0.11692816181141515], after: [2.399600454447249, 0.11758154782898447] },
+};
+
+function walkToStep(version: string, autoJump: boolean) {
+  const [posX, velX] = recorded[version].before;
+  const rig = createBotcraftPlayerRig({ version, position: new Vec3(posX, groundLevel, 1381.5), groundLevel });
+  const world = createFlatWorld(version, groundLevel) as any;
+  for (let x = 3; x <= 5; x++) {
+    for (let z = 1380; z <= 1382; z++) world.setOverrideBlock(new Vec3(x, groundLevel, z), rig.mcData.blocksByName.stone.id);
+  }
+  rig.playerState.vel.set(velX, -0.0784000015258789, 0);
+  rig.playerState.yawDegrees = 270;
+  rig.playerState.control.forward = true;
+  rig.playerState.autoJumpEnabled = autoJump;
+  rig.physics.simulate(rig.playerCtx, world);
+  rig.physics.simulate(rig.playerCtx, world);
+  return rig.playerState;
+}
+
+describe("Botcraft auto-jump", () => {
+  for (const version of Object.keys(recorded)) {
+    it(`jumps up a step the player walks into with auto-jump on (${version})`, () => {
+      const state = walkToStep(version, true);
+
+      expect(state.pos.x).toBe(recorded[version].after[0]);
+      expect(state.vel.x).toBe(recorded[version].after[1]);
+      expect(state.pos.y).toBe(101.41999998688698);
+      expect(state.vel.y).toBe(0.33319999363422365);
+    });
+
+    it(`does not jump with auto-jump off (${version})`, () => {
+      expect(walkToStep(version, false).pos.y).toBe(groundLevel);
+    });
+  }
+});

@@ -687,6 +687,9 @@ export class BotcraftPhysics implements IPhysics {
     const tickStartedOnGround = player.onGround;
     const heading = convInpToAxes(player);
     player.heading = heading;
+    // LocalPlayer.aiStep: the jump auto-jump queued the tick before is pressed now
+    const autoJumping = player.autoJumpTime > 0;
+    if (autoJumping) player.autoJumpTime--;
 
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);
@@ -696,6 +699,8 @@ export class BotcraftPhysics implements IPhysics {
     if (player.isInLava) player.fallDistance *= 0.5;
 
     this.inputsToCrouch(ctx, heading, world);
+    // the input's move vector as LocalPlayer.updateAutoJump reads it
+    const moveVector = { x: heading.strafe, y: heading.forward };
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx);
 
@@ -745,7 +750,7 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y = 0;
       }
 
-      this.inputsToJump(player, world, ctx.worldSettings);
+      this.inputsToJump(player, world, ctx.worldSettings, autoJumping);
 
       if (this.verGreaterThan("1.21.4")) {
         this.modifyInput(ctx, heading, world);
@@ -768,7 +773,9 @@ export class BotcraftPhysics implements IPhysics {
 
       if (player.slowFalling > 0 || player.levitation > 0) player.fallDistance = 0;
       const velY = player.vel.y;
+      const { x: startX, z: startZ } = player.pos;
       this.movePlayer(ctx, world, sprintedBefore); // TODO: should be in player-specific logic??
+      this.updateAutoJump(ctx, world, Math.fround(player.pos.x - startX), Math.fround(player.pos.z - startZ), moveVector);
       // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
       if (!this.verLessThan("1.21.2")) {
         this.stepOn(player, world);
@@ -1262,13 +1269,99 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-  private inputsToJump(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {
+  /**
+   * LocalPlayer.updateAutoJump (1.11+, with the auto-jump option), after the player's move by dx, dz: walking on the
+   * ground into a step between 0.5 and 1.2 (more with jump boost) high, with room above, queues a jump for the next
+   * tick. The step is the first block box that the two lines 0.51 above the feet, half a width to each side, cross
+   * on the way 7 ticks of speed (at least the move) ahead.
+   */
+  private updateAutoJump(ctx: EPhysicsCtx, world: World, dx: number, dz: number, moveVector: { x: number; y: number }) {
+    const f32 = Math.fround;
+    const player = ctx.state as PlayerState;
+    if (!player.autoJumpEnabled || this.verLessThan("1.11") || player.autoJumpTime > 0 || !player.onGround) return;
+    if (player.control.sneak || (moveVector.x === 0 && moveVector.y === 0)) return;
+    if (this.verGreaterThan("1.14.4") && this.getBlockJumpFactor(player, world, ctx.worldSettings) < 1) return;
+
+    const { x, y, z } = player.pos;
+    const speed = this.getMovementSpeedAttribute(ctx);
+    let dirX = dx;
+    let dirZ = dz;
+    let lengthSqr = f32(dirX * dirX + dirZ * dirZ);
+    const yaw = floatRadians(this.yawDegrees(player));
+    if (lengthSqr <= f32(0.001)) {
+      const strafe = f32(speed * moveVector.x);
+      const forward = f32(speed * moveVector.y);
+      const sin = this.mth.sin(yaw);
+      const cos = this.mth.cos(yaw);
+      dirX = f32(f32(strafe * cos) - f32(forward * sin));
+      dirZ = f32(f32(forward * cos) + f32(strafe * sin));
+      lengthSqr = f32(dirX * dirX + dirZ * dirZ);
+      if (lengthSqr <= f32(0.001)) return;
+    }
+    const invLength = f32(1 / Math.sqrt(lengthSqr));
+    dirX *= invLength;
+    dirZ *= invLength;
+    // facing at most a little away from the way it goes
+    const cosPitch = this.mth.cos(floatRadians(Math.fround((-player.pitch * 180) / Math.PI)));
+    if (f32(-this.mth.sin(yaw) * cosPitch * dirX + this.mth.cos(yaw) * cosPitch * dirZ) < f32(-0.15)) return;
+
+    const empty = (bx: number, by: number, bz: number) => {
+      const block = world.getBlock(new Vec3(bx, by, bz));
+      return block == null || block.shapes.length === 0;
+    };
+    const headX = Math.floor(x);
+    let headY = Math.floor(player.getBB().maxY);
+    const headZ = Math.floor(z);
+    if (!empty(headX, headY, headZ) || !empty(headX, ++headY, headZ)) return;
+
+    let maxRise = f32(1.2);
+    if (player.jumpBoost > 0) maxRise = f32(maxRise + f32(player.jumpBoost * f32(0.75)));
+    const reach = Math.max(f32(speed * 7), f32(1 / invLength));
+    const endX = x + dx + dirX * reach;
+    const endZ = z + dz + dirZ * reach;
+    const width = f32(player.halfWidth * 2);
+    const area = new AABB(
+      Math.min(x, endX) - width, y, Math.min(z, endZ) - width,
+      Math.max(x, endX) + width, y + f32(player.height), Math.max(z, endZ) + width,
+    );
+    const lineY = y + 0.5099999904632568;
+    const sideX = -dirZ * f32(width * 0.5);
+    const sideZ = dirX * f32(width * 0.5);
+    // AABB.intersects(Vec3, Vec3): with the box the two points span
+    const crosses = (box: AABB, ax: number, az: number, bx: number, bz: number) =>
+      box.minX < Math.max(ax, bx) && box.maxX > Math.min(ax, bx) && box.minY < lineY && box.maxY > lineY &&
+      box.minZ < Math.max(az, bz) && box.maxZ > Math.min(az, bz);
+
+    let top = Number.NaN;
+    for (const box of this.getSurroundingBBs(area, world, false)) {
+      if (!box.intersects(area)) continue;
+      if (!crosses(box, x - sideX, z - sideZ, endX - sideX, endZ - sideZ) && !crosses(box, x + sideX, z + sideZ, endX + sideX, endZ + sideZ)) continue;
+      top = f32(box.maxY);
+      const cx = Math.floor((box.minX + box.maxX) / 2);
+      const cy = Math.floor((box.minY + box.maxY) / 2);
+      const cz = Math.floor((box.minZ + box.maxZ) / 2);
+      for (let step = 1; step < maxRise; step++) {
+        const above = world.getBlock(new Vec3(cx, cy + step, cz));
+        if (above != null && above.shapes.length > 0) {
+          top = f32(f32(Math.max(...above.shapes.map((shape) => shape[4]))) + (cy + step));
+          if (top - y > maxRise) return;
+        }
+        if (step > 1 && !empty(headX, ++headY, headZ)) return;
+      }
+      break;
+    }
+    if (Number.isNaN(top)) return;
+    const rise = f32(top - y);
+    if (rise > f32(0.5) && rise <= maxRise) player.autoJumpTime = 1;
+  }
+
+  private inputsToJump(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings, autoJumping = false) {
     // TODO: implement non-player entity jumping.
 
     if (entity instanceof PlayerState) {
       const player = entity as PlayerState;
 
-      if (!player.control.jump) {
+      if (!player.control.jump && !autoJumping) {
         player.jumpTicks = 0;
         return;
       }

@@ -128,6 +128,9 @@ export class PlayerState implements IEntityState {
     public sprintTriggerTime: number = 0;
     /** The forward impulse of the tick before, slowed (before 1.21.5) or normalized (1.21.5+), not yet scaled by 0.98F. */
     public prevForwardImpulse: number = 0;
+    /** The client's auto-jump option (1.11+), and LocalPlayer.autoJumpTime: a jump is pressed for the player next tick. */
+    public autoJumpEnabled: boolean = false;
+    public autoJumpTime: number = 0;
     public flyJumpTriggerTime: number = 0;
 
     public sneakCollision: boolean = false;
@@ -294,6 +297,7 @@ export class PlayerState implements IEntityState {
         this.jumpQueued = (bot as any).jumpQueued ?? false;
         this.flyJumpTriggerTime = (bot as any).flyJumpTriggerTime ?? 0;
         this.sprintTriggerTime = (bot as any).sprintTriggerTime ?? 0;
+        this.autoJumpTime = (bot as unknown as { autoJumpTime?: number }).autoJumpTime ?? 0;
 
         // Input only (not modified)
         this.attributes = bot.entity.attributes;
@@ -402,6 +406,7 @@ export class PlayerState implements IEntityState {
         (bot as any).jumpQueued = this.jumpQueued;
         (bot as any).flyJumpTriggerTime = this.flyJumpTriggerTime;
         (bot as any).sprintTriggerTime = this.sprintTriggerTime;
+        (bot as unknown as { autoJumpTime?: number }).autoJumpTime = this.autoJumpTime;
 
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;
@@ -458,6 +463,8 @@ export class PlayerState implements IEntityState {
         tmp.flyJumpTriggerTime = this.flyJumpTriggerTime ?? 0;
         tmp.sprintTriggerTime = this.sprintTriggerTime ?? 0;
         tmp.prevForwardImpulse = this.prevForwardImpulse;
+        tmp.autoJumpEnabled = this.autoJumpEnabled;
+        tmp.autoJumpTime = this.autoJumpTime;
 
         // Input only (not modified)
         tmp.attributes = this.attributes;
@@ -535,6 +542,8 @@ export class PlayerState implements IEntityState {
         this.flyJumpTriggerTime = other.flyJumpTriggerTime ?? 0;
         this.sprintTriggerTime = other.sprintTriggerTime ?? 0;
         this.prevForwardImpulse = other.prevForwardImpulse ?? 0;
+        this.autoJumpEnabled = other.autoJumpEnabled ?? false;
+        this.autoJumpTime = other.autoJumpTime ?? 0;
 
         // Input only (not modified)
         this.attributes = other.attributes;
