@@ -1285,7 +1285,9 @@ export class BotcraftPhysics implements IPhysics {
 
 
     // if a player is stuck, reset stuck multiplier and set velocity to 0.
-    if (player.stuckSpeedMultiplier.norm() ** 2 > 1e-7) {
+    // isInWeb: this move is slowed by a cobweb, berry bush or powder snow (Entity.isInWeb before 1.14)
+    player.isInWeb = player.stuckSpeedMultiplier.norm() ** 2 > 1e-7;
+    if (player.isInWeb) {
       movement.x *= player.stuckSpeedMultiplier.x;
       movement.y *= player.stuckSpeedMultiplier.y;
       movement.z *= player.stuckSpeedMultiplier.z;
