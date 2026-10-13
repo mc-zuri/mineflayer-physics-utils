@@ -117,6 +117,9 @@ export class PlayerState implements IEntityState {
     public fallDistance: number = 0;
     /** LivingEntity.getScale: the scale attribute (1.20.5+), which sizes the player's box and eyes. */
     public scale: number = 1;
+    /** Entity.isInPowderSnow: touched powder snow in the last block effects; wasInPowderSnow: in the tick before. */
+    public isInPowderSnow: boolean = false;
+    public wasInPowderSnow: boolean = false;
     /**
      * Before 1.17: the bounding box vanilla keeps across ticks (the engine's last move left it here), with the position
      * and size it was left with. The engine starts from it while pos is still that position, else builds it from pos.
@@ -285,6 +288,7 @@ export class PlayerState implements IEntityState {
         this.vel.set(bot.entity.velocity.x, bot.entity.velocity.y, bot.entity.velocity.z);
         this.supportingBlockPos = (bot.entity as any).supportingBlockPos ?? null;
         this.fallDistance = (bot.entity as any).fallDistance ?? 0;
+        this.isInPowderSnow = (bot.entity as { isInPowderSnow?: boolean }).isInPowderSnow ?? false;
         this.onGround = bot.entity.onGround;
         this.lastOnGround = (bot.entity as any).lastOnGround ?? bot.entity.onGround;
         this.onClimbable = (bot.entity as any).onClimbable;
@@ -404,6 +408,7 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
         (bot.entity as any).supportingBlockPos = this.supportingBlockPos;
         (bot.entity as any).fallDistance = this.fallDistance;
+        (bot.entity as { isInPowderSnow?: boolean }).isInPowderSnow = this.isInPowderSnow;
 
         // dunno what to do about these, ngl.
         (bot as any).jumpTicks = this.jumpTicks;
@@ -458,6 +463,8 @@ export class PlayerState implements IEntityState {
         tmp.supportingBlockPos = this.supportingBlockPos;
         tmp.fallDistance = this.fallDistance;
         tmp.scale = this.scale;
+        tmp.isInPowderSnow = this.isInPowderSnow;
+        tmp.wasInPowderSnow = this.wasInPowderSnow;
         tmp.keptBoundingBox = this.keptBoundingBox;
         tmp.nearbyEntities = this.nearbyEntities;
 
@@ -539,6 +546,8 @@ export class PlayerState implements IEntityState {
         this.supportingBlockPos = other.supportingBlockPos;
         this.fallDistance = other.fallDistance;
         this.scale = other.scale;
+        this.isInPowderSnow = other.isInPowderSnow;
+        this.wasInPowderSnow = other.wasInPowderSnow;
         this.keptBoundingBox = other.keptBoundingBox;
         this.nearbyEntities = other.nearbyEntities;
 

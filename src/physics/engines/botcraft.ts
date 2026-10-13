@@ -866,6 +866,10 @@ export class BotcraftPhysics implements IPhysics {
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);
 
+    // Entity.baseTick: the powder snow the last block effects touched becomes the previous tick's
+    player.wasInPowderSnow = player.isInPowderSnow;
+    player.isInPowderSnow = false;
+
     // Entity.baseTick: touching water ends a fall, lava halves it
     if (player.isInWater) player.fallDistance = 0;
     if (player.isInLava) player.fallDistance *= 0.5;
@@ -1873,10 +1877,13 @@ export class BotcraftPhysics implements IPhysics {
         this.applyMovement(ctx, world);
         player.onClimbable = this.isInClimbable(player, world);
 
-        // if colliding and in climbable, go up. The jump key climbs too since 1.14.
+        // if colliding and in climbable, go up. The jump key climbs too since 1.14. Leather boots climb powder snow
+        // (1.17+): at the feet after the move, from 1.21.5 if the tick before was in it (wasInPowderSnow).
         const climbing = player.isCollidedHorizontally || (player.control.jump && !this.verLessThan("1.14"));
-        if (climbing && player.onClimbable) {
-          // TODO: or in powder with leather boots.
+        const inPowderSnow = this.verLessThan("1.21.5")
+          ? world.getBlock(player.pos)?.type === this.powderSnowId
+          : player.wasInPowderSnow;
+        if (climbing && (player.onClimbable || (inPowderSnow && player.canWalkOnPowderSnow))) {
           player.vel.y = 0.2;
         }
 
@@ -2620,6 +2627,7 @@ export class BotcraftPhysics implements IPhysics {
       player.fallDistance = 0; // makeStuckInBlock
     } else if (this.powderSnowId === block.type) {
       // PowderSnowBlock::entityInside
+      player.isInPowderSnow = true;
       const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
       if (feetBlock && this.powderSnowId === feetBlock.type) {
         player.stuckSpeedMultiplier = new Vec3(0.8999999761581421, 1.5, 0.8999999761581421);
