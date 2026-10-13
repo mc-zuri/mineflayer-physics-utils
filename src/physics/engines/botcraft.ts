@@ -897,10 +897,14 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y += 0.03999999910593033; // magic number
       } else if (player.onGround && player.jumpTicks === 0) {
         const blockJumpFactor = this.getBlockJumpFactor(player, world, worldSettings);
-        const jumpBoost = Math.fround(0.1 * player.jumpBoost); // in mineflayer, level 1 is 1, not 0.
+        // the jump boost, 0.1F per level in float (in mineflayer, level 1 is 1, not 0)
+        const jumpBoost = Math.fround(Math.fround(0.1) * player.jumpBoost);
 
         if (this.verLessThan("1.20.5")) {
-          const jumpPower = Math.fround(Math.fround(0.42) * Math.fround(blockJumpFactor) + jumpBoost);
+          // added to the jump power in float 1.14 - 1.17 and since 1.20, in double before 1.14 and 1.17.1 - 1.19.4
+          const floatSum = (!this.verLessThan("1.14") && this.verLessThan("1.17.1")) || !this.verLessThan("1.20");
+          const power = Math.fround(Math.fround(0.42) * Math.fround(blockJumpFactor));
+          const jumpPower = floatSum ? Math.fround(power + jumpBoost) : power + jumpBoost;
           player.vel.y = Math.max(jumpPower, player.vel.y);
           if (player.sprinting) {
             const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
