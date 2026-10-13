@@ -652,12 +652,11 @@ export class BotcraftPhysics implements IPhysics {
     // Determine if moving slowly
     const isMovingSlowly = this.isMovingSlowly(ctx, world);
 
-    // Handle post-1.21.3 sprinting conditions
-    if (this.verGreaterThan("1.21.3")) {
+    // 1.21.4 only: LocalPlayer.shouldStopSprinting, right after the input's tick (1.21.5 dropped it: sneaking keeps a
+    // sprint, blindness stops it in shouldStopRunSprinting)
+    if (this.verGreaterThan("1.21.3") && this.verLessThan("1.21.5")) {
       // TODO: just use stored blindness effect.
       const hasBlindness = this.getEffectLevel(CheapEffects.BLINDNESS, player.effects) > 0;
-
-      // Stop sprinting when crouching fix in 1.21.4+
       if (hasBlindness || isMovingSlowly) {
         this.setSprinting(ctx, false);
       }
