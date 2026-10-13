@@ -13,6 +13,7 @@ import {
 } from "../../util/physicsUtils";
 import * as math from "../info/math";
 import * as attributes from "../info/attributes";
+import { Mth, floatRadians, mthFor } from "../../util/mth";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
@@ -55,6 +56,7 @@ export class BotcraftPhysics implements IPhysics {
   public stepHeightAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
+  public readonly mth: Mth;
 
   protected bedId: number;
   protected slimeBlockId: number;
@@ -79,6 +81,7 @@ export class BotcraftPhysics implements IPhysics {
     this.data = mcData;
     const blocksByName = mcData.blocksByName;
     this.supportFeature = makeSupportFeature(mcData);
+    this.mth = mthFor(!this.verLessThan("1.21.11"));
     this.movementSpeedAttribute = extractAttribute(this, "movementSpeed");
     this.movementEfficiencyAttribute = extractAttribute(this, "movementEfficiency");
     this.jumpStrengthAttribute = extractAttribute(this, "jumpStrength");
@@ -1738,24 +1741,53 @@ export class BotcraftPhysics implements IPhysics {
       inputStrength *= player.flySpeed * 40;
     }
 
-    const inputVector = new Vec3(player.heading.strafe, 0, player.heading.forward);
-    const sqrNorm = inputVector.norm() ** 2;
-    if (sqrNorm < 1e-7) {
+    const yaw = floatRadians(this.yawDegrees(player));
+
+    if (this.verLessThan("1.14")) {
+      // Entity.moveRelative (moveFlying in 1.8 - 1.11): float arithmetic throughout
+      const f32 = Math.fround;
+      let strafe = f32(player.heading.strafe);
+      let forward = f32(player.heading.forward);
+      let length = f32(f32(strafe * strafe) + f32(forward * forward));
+      if (length < f32(1.0e-4)) return;
+      length = f32(Math.sqrt(length));
+      if (length < 1) length = 1;
+      const scale = f32(f32(inputStrength) / length);
+      strafe = f32(strafe * scale);
+      forward = f32(forward * scale);
+      const sin = this.mth.sin(yaw);
+      const cos = this.mth.cos(yaw);
+      player.vel.x += f32(f32(strafe * cos) - f32(forward * sin));
+      player.vel.z += f32(f32(forward * cos) + f32(strafe * sin));
       return;
     }
-    if (sqrNorm > 1) {
-      inputVector.normalize();
+
+    // Entity.getInputVector: the float inputs as a double vector, normalized when longer than 1 (Vec3.normalize
+    // took a float square root before 1.17), scaled by the speed, turned by Mth.sin/cos of the yaw
+    let x = player.heading.strafe;
+    let z = player.heading.forward;
+    const lengthSqr = x * x + z * z;
+    if (lengthSqr < 1e-7) return;
+    if (lengthSqr > 1) {
+      const length = this.verLessThan("1.17") ? Math.fround(Math.sqrt(lengthSqr)) : Math.sqrt(lengthSqr);
+      x /= length;
+      z /= length;
     }
-    inputVector.scale(inputStrength);
+    x *= inputStrength;
+    z *= inputStrength;
+    const sin = this.mth.sin(yaw);
+    const cos = this.mth.cos(yaw);
+    player.vel.x += x * cos - z * sin;
+    player.vel.z += z * cos + x * sin;
+  }
 
-    const yaw = Math.PI - player.yaw;
-    const sinYaw = Math.sin(yaw);
-    const cosYaw = Math.cos(yaw);
-
-    const offsetX = inputVector.x * cosYaw - inputVector.z * sinYaw;
-    const offsetZ = inputVector.z * cosYaw + inputVector.x * sinYaw;
-    player.vel.x += offsetX;
-    player.vel.z += offsetZ;
+  /**
+   * The player's yaw as vanilla holds it: float degrees, keeping whole turns. Taken from the state when the bot gave
+   * it (mineflayer keeps bot.entity.yawDegrees), else from the radians mineflayer converts it to.
+   */
+  private yawDegrees(player: PlayerState): number {
+    if (player.yawDegrees != null) return player.yawDegrees;
+    return Math.fround((Math.PI - player.yaw) * (180 / Math.PI));
   }
 
   isInClimbable(player: PlayerState, world: World): boolean {

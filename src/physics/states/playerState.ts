@@ -117,6 +117,8 @@ export class PlayerState implements IEntityState {
     public attributes: Entity["attributes"] /* dunno yet */ = {};
     public yaw: number = 0;
     public pitch: number = 0;
+    /** The yaw in float degrees as vanilla holds it (bot.entity.yawDegrees), when the bot keeps it. */
+    public yawDegrees?: number;
     public control: ControlStateHandler = defaultMoves;
     public prevControl: ControlStateHandler = defaultMoves;
     public heading: Heading = { forward: 0, strafe: 0 };
@@ -276,6 +278,8 @@ export class PlayerState implements IEntityState {
         this.attributes = bot.entity.attributes;
         this.yaw = bot.entity.yaw;
         this.pitch = bot.entity.pitch;
+        const yawDegrees = (bot.entity as { yawDegrees?: unknown }).yawDegrees;
+        this.yawDegrees = yawDegrees == null ? undefined : Number(yawDegrees);
         this.control = control ?? ControlStateHandler.COPY_BOT(bot); // prevControl only updated internally.
 
 
@@ -428,6 +432,7 @@ export class PlayerState implements IEntityState {
         // Input only (not modified)
         tmp.attributes = this.attributes;
         tmp.yaw = this.yaw;
+        tmp.yawDegrees = this.yawDegrees;
         tmp.pitch = this.pitch;
         tmp.control = this.control.clone();
         tmp.prevControl = this.prevControl.clone();
