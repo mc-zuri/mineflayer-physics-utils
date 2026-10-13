@@ -1490,7 +1490,12 @@ export class BotcraftPhysics implements IPhysics {
     const movementBeforeCollisions = movement.clone();
 
     const boundingBox = this.boundingBoxForMove(player);
-    { // Entity::collide
+    let legacyMovedBox: AABB | null = null;
+    if (this.verLessThan("1.14")) {
+      const legacy = this.legacyCollide(world, boundingBox, movement, Math.fround(maxUpStep), player.onGround);
+      movement = legacy.movement;
+      legacyMovedBox = legacy.bb;
+    } else { // Entity::collide
       const playerAABB = boundingBox;
       const fuck = playerAABB.clone();
       const hDist = (vec: Vec3) => Math.sqrt(vec.x * vec.x + vec.z * vec.z);
@@ -1546,7 +1551,9 @@ export class BotcraftPhysics implements IPhysics {
       movement = newMovement
     }
     // console.log('after all collision', movement)
-    if (this.verLessThan("1.17")) {
+    if (legacyMovedBox != null) {
+      this.keepBoundingBox(player, legacyMovedBox, true);
+    } else if (this.verLessThan("1.17")) {
       const moved = movement.norm() ** 2 > 1e-7;
       this.keepBoundingBox(player, moved ? boundingBox.move(movement) : boundingBox, moved);
     } else if (movement.norm() ** 2 > 1e-7) {
@@ -1555,9 +1562,12 @@ export class BotcraftPhysics implements IPhysics {
 
     // 1.20.5: movement is now considered var4.
 
-    const collisionX = Math.abs(movement.x - movementBeforeCollisions.x) > 1e-7;
-    const collisionY = Math.abs(movement.y - movementBeforeCollisions.y) > 1e-7;
-    const collisionZ = Math.abs(movement.z - movementBeforeCollisions.z) > 1e-7;
+    // before 1.14 the collision flags compare the movements exactly
+    const collided = (requested: number, moved: number) =>
+      legacyMovedBox != null ? requested !== moved : Math.abs(moved - requested) > 1e-7;
+    const collisionX = collided(movementBeforeCollisions.x, movement.x);
+    const collisionY = collided(movementBeforeCollisions.y, movement.y);
+    const collisionZ = collided(movementBeforeCollisions.z, movement.z);
 
     // console.log('collisions', collisionX, collisionY, collisionZ, movementBeforeCollisions, movement, player.vel, player.pos, player.getBB())
     player.isCollidedHorizontally = collisionX || collisionZ;
@@ -1805,6 +1815,113 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
     }
+  }
+
+  /**
+   * Entity.move's collision before 1.14 (1.8 - 1.13.2): against the boxes the requested move sweeps, the box moves on
+   * y, then x, then z. When it hit something horizontally while on the ground (or landing) it also tries the move
+   * raised by the step height, rising against the box swept by the requested x and z and against the box itself, keeps
+   * the longer horizontal one, settles it down and keeps it only if it goes farther than the first.
+   * Returns the moved box and the movement it made.
+   */
+  private legacyCollide(world: World, bb: AABB, requested: Vec3, stepHeight: number, onGround: boolean) {
+    const { x: m, y: n, z: o } = requested;
+    const colliders = this.legacyColliders(world, bb, m, n, o);
+    let box = bb;
+    let x = m;
+    let y = n;
+    let z = o;
+    if (y !== 0) {
+      y = this.legacyAxisOffset(1, box, colliders, y);
+      box = box.moveCoords(0, y, 0);
+    }
+    if (x !== 0) {
+      x = this.legacyAxisOffset(0, box, colliders, x);
+      if (x !== 0) box = box.moveCoords(x, 0, 0);
+    }
+    if (z !== 0) {
+      z = this.legacyAxisOffset(2, box, colliders, z);
+      if (z !== 0) box = box.moveCoords(0, 0, z);
+    }
+
+    const landing = onGround || (n !== y && n < 0);
+    if (stepHeight > 0 && landing && (m !== x || o !== z)) {
+      const stepColliders = this.legacyColliders(world, bb, m, stepHeight, o);
+      const across = (start: AABB, rise: number) => {
+        const raised = start.moveCoords(0, rise, 0);
+        const dx = this.legacyAxisOffset(0, raised, stepColliders, m);
+        const movedX = raised.moveCoords(dx, 0, 0);
+        const dz = this.legacyAxisOffset(2, movedX, stepColliders, o);
+        return { box: movedX.moveCoords(0, 0, dz), x: dx, y: rise, z: dz };
+      };
+      // the rise against the box swept by the requested x and z, then against the box itself
+      const swept = across(bb, this.legacyAxisOffset(1, bb.expandTowardsCoords(m, 0, o), stepColliders, stepHeight));
+      const plain = across(bb, this.legacyAxisOffset(1, bb, stepColliders, stepHeight));
+      const stepped = swept.x * swept.x + swept.z * swept.z > plain.x * plain.x + plain.z * plain.z ? swept : plain;
+      const down = this.legacyAxisOffset(1, stepped.box, stepColliders, -stepped.y);
+      if (x * x + z * z < stepped.x * stepped.x + stepped.z * stepped.z) {
+        box = stepped.box.moveCoords(0, down, 0);
+        x = stepped.x;
+        y = down;
+        z = stepped.z;
+      }
+    }
+    return { bb: box, movement: new Vec3(x, y, z) };
+  }
+
+  /**
+   * The block boxes a move of bb by (x, y, z) can meet before 1.14: World.getCollisionBoxes, the boxes intersecting the
+   * swept box. 1.13's IWorldReaderBase sweeps a box grown by 1e-7, leaves out the blocks bb already reaches into and
+   * lists the partial block shapes before the full cubes.
+   */
+  private legacyColliders(world: World, bb: AABB, x: number, y: number, z: number): AABB[] {
+    const swept = bb.expandTowardsCoords(x, y, z);
+    if (this.verLessThan("1.13")) return this.getSurroundingBBs(swept, world).filter((box) => box.intersects(swept));
+    const query = swept.clone().expand(COLLISION_EPSILON, COLLISION_EPSILON, COLLISION_EPSILON);
+    const inside = bb.clone().expand(-COLLISION_EPSILON, -COLLISION_EPSILON, -COLLISION_EPSILON);
+    const partial: AABB[] = [];
+    const full: AABB[] = [];
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.y = Math.floor(query.minY) - 1; cursor.y <= Math.floor(query.maxY); ++cursor.y) {
+      for (cursor.z = Math.floor(query.minZ); cursor.z <= Math.floor(query.maxZ); ++cursor.z) {
+        for (cursor.x = Math.floor(query.minX); cursor.x <= Math.floor(query.maxX); ++cursor.x) {
+          const block = world.getBlock(cursor) as Block | null;
+          if (block == null) continue;
+          const boxes = block.shapes.map((shape) => new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z));
+          if (boxes.some((box) => box.intersects(inside)) || !boxes.some((box) => box.intersects(query))) continue;
+          const isFullCube = block.shapes.length === 1 && block.shapes[0].every((v, i) => v === (i < 3 ? 0 : 1));
+          (isFullCube ? full : partial).push(...boxes);
+        }
+      }
+    }
+    return [...partial, ...full];
+  }
+
+  /**
+   * The distance a box moves along an axis before it meets the colliders: AxisAlignedBB.calculateX/Y/ZOffset before
+   * 1.13 (no epsilon), VoxelShapes.calculateMaxOffset on 1.13 (faces within 1e-7, moves under 1e-7 dropped).
+   */
+  private legacyAxisOffset(axis: number, bb: AABB, colliders: AABB[], distance: number): number {
+    if (!this.verLessThan("1.13")) {
+      for (const collider of colliders) {
+        if (Math.abs(distance) < COLLISION_EPSILON) return 0;
+        distance = this.voxelShapeCollide(axis, bb, distance, [collider]);
+      }
+      return distance;
+    }
+    const [min, max] = bb.minAndMaxArrays();
+    const axis1 = (axis + 1) % 3;
+    const axis2 = (axis + 2) % 3;
+    for (const collider of colliders) {
+      const [cMin, cMax] = collider.minAndMaxArrays();
+      if (max[axis1] <= cMin[axis1] || min[axis1] >= cMax[axis1] || max[axis2] <= cMin[axis2] || min[axis2] >= cMax[axis2]) continue;
+      if (distance > 0 && max[axis] <= cMin[axis]) {
+        distance = Math.min(distance, cMin[axis] - max[axis]);
+      } else if (distance < 0 && min[axis] >= cMax[axis]) {
+        distance = Math.max(distance, cMax[axis] - min[axis]);
+      }
+    }
+    return distance;
   }
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3, colliders: AABB[] = []): Vec3 {

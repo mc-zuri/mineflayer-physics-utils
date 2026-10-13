@@ -120,7 +120,8 @@ describe("World collision simulation", () => {
     });
 
     fakeWorld.setOverrideBlock(new Vec3(0, groundLevel + 1, 1), mcData.blocksByName.dirt.id);
-    rig.fakePlayer.entity.position = new Vec3(0.5, groundLevel, 0.7);
+    // touching the block: at z 0.7 the float half width would reach 1.2e-8 into it, which 1.12 does not collide with
+    rig.fakePlayer.entity.position = new Vec3(0.5, groundLevel, 1 - PLAYER_HALF_WIDTH);
     rig.playerState.pos = rig.fakePlayer.entity.position.clone();
     rig.playerState.look(-359.9999 * (Math.PI / 360), 0);
     rig.playerState.control.jump = true;
@@ -149,7 +150,8 @@ describe("World collision simulation", () => {
     const shapes = fakeWorld.getBlock(stairPos).shapes;
     shapes.map((shape) => AABB.fromShape(shape, stairPos));
 
-    rig.fakePlayer.entity.position = new Vec3(-0.3, groundLevel, -0.5);
+    // touching the stairs (at x -0.3 the float half width would reach into them)
+    rig.fakePlayer.entity.position = new Vec3(-PLAYER_HALF_WIDTH, groundLevel, -0.5);
     rig.playerState.pos = rig.fakePlayer.entity.position.clone();
     rig.playerState.look(-180 * (Math.PI / 360), 0);
     rig.playerState.control.forward = true;
