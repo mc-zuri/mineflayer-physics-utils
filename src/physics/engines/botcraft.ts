@@ -37,14 +37,17 @@ type AABBPoints = [number, number, number, number, number, number];
 const isBoatName = (name: string) => /(^|_)(boat|raft)$/.test(name);
 
 
-function extractAttribute(ctx: IPhysics, genericName: string) {
+/**
+ * The key an attribute the server synced is kept under (mineflayer's entity.attributes): the name the protocol gives
+ * it. From 1.16 to 1.20.4 ClientboundUpdateAttributesPacket writes the attribute's namespaced registry name; before,
+ * its plain name; from 1.20.5 its registry id, which minecraft-data maps to the name its attributes.json gives.
+ */
+export function extractAttribute(ctx: IPhysics, genericName: string) {
   const data = ctx.data.attributesByName[genericName] as any;
   if (data == null) return null;
-  if (ctx.supportFeature("attributesPrefixedByMinecraft")) {
-    return `minecraft:${data.resource}`;
-  } else {
-    return data.resource;
-  }
+  const resource = data.resource;
+  const namespaced = ctx.data.version[">="]("1.16") && ctx.data.version["<"]("1.20.5");
+  return namespaced && !resource.startsWith("minecraft:") ? `minecraft:${resource}` : resource;
 }
 
 /**
