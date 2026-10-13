@@ -59,5 +59,7 @@ export class PhysicsWorldSettings {
         this.mcData = mcData
         this.entityData = mcData["entitiesByName"]
         this.mobData = mcData["mobs"]
+        // LivingEntity.SPRINTING_MODIFIER_ID: from 1.21 attribute modifiers are named by id, not UUID
+        if (mcData.version[">="]("1.21")) this.sprintingUUID = "minecraft:sprinting"
     }
 }
