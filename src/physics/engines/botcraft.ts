@@ -714,7 +714,10 @@ export class BotcraftPhysics implements IPhysics {
       const velY = player.vel.y;
       this.movePlayer(ctx, world, sprintedBefore); // TODO: should be in player-specific logic??
       // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
-      if (!this.verLessThan("1.21.2")) this.stepOn(player, world);
+      if (!this.verLessThan("1.21.2")) {
+        this.stepOn(player, world);
+        if (!player.flying) this.checkInsideBlocks(player, world, ctx.worldSettings);
+      }
       if (player.flying) {
         player.vel.y = 0.6 * velY;
         /* player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying, false); */ player.fallFlying = false;
@@ -1816,8 +1819,8 @@ export class BotcraftPhysics implements IPhysics {
     // https://github.com/GrimAnticheat/Grim/blob/2fe3b3e5ab9bd4ea692d712712645cf38209378b/common/src/main/java/ac/grim/grimac/predictionengine/movementtick/MovementTicker.java#L172-L184
     if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
 
-    // Rough fix for now: ignore this if we are flying.
-    if (!player.flying) {
+    // Rough fix for now: ignore this if we are flying. (Entity.move until 1.21.2 moved it after the whole travel)
+    if (!player.flying && this.verLessThan("1.21.2")) {
       this.checkInsideBlocks(player, world, ctx.worldSettings);
     }
 
@@ -1965,21 +1968,26 @@ export class BotcraftPhysics implements IPhysics {
               player.vel.y = Math.min(bubbleDrag.maxUp, player.vel.y + bubbleDrag.up);
             }
           } else if (this.honeyblockId === block.type) {
+            // From 1.21.2 the block runs after travel's gravity and drag: HoneyBlock undoes them to read the motion
+            // (getOldDeltaY) and applies them to what it sets (getNewDeltaY)
+            const afterTravel = !this.verLessThan("1.21.2");
+            const oldDeltaY = (vy: number) => (afterTravel ? vy / 0.9800000190734863 + 0.08 : vy);
+            const newDeltaY = (vy: number) => (afterTravel ? (vy - 0.08) * 0.9800000190734863 : vy);
             // Check if sliding down on the side of the block
             if (
               !player.onGround &&
               player.pos.y <= blockPos.y + 0.9375 - 1e-7 &&
-              player.vel.y < -0.08 &&
+              oldDeltaY(player.vel.y) < -0.08 &&
               (Math.abs(blockPos.x + 0.5 - player.pos.x) + 1e-7 > 0.4375 + player.halfWidth ||
                 Math.abs(blockPos.z + 0.5 - player.pos.z) + 1e-7 > 0.4375 + player.halfWidth)
             ) {
-              if (player.vel.y < -0.13) {
-                const factor = -0.05 / player.vel.y; // magic number.
+              if (oldDeltaY(player.vel.y) < -0.13) {
+                const factor = -0.05 / oldDeltaY(player.vel.y); // magic number.
                 player.vel.x *= factor;
                 player.vel.z *= factor;
-                player.vel.y = -0.05; // magic number.
+                player.vel.y = newDeltaY(-0.05); // magic number.
               } else {
-                player.vel.y = -0.05; // magic number.
+                player.vel.y = newDeltaY(-0.05); // magic number.
               }
             }
           } else if (this.soulsandId === block.type && this.verLessThan("1.15")) {
