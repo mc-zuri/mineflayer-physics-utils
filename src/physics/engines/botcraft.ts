@@ -1210,8 +1210,9 @@ export class BotcraftPhysics implements IPhysics {
         this.applyMovement(ctx, world);
         player.onClimbable = this.isInClimbable(player, world);
 
-        // if colliding and in climbable, go up.
-        if ((player.isCollidedHorizontally || player.control.jump) && player.onClimbable) {
+        // if colliding and in climbable, go up. The jump key climbs too since 1.14.
+        const climbing = player.isCollidedHorizontally || (player.control.jump && !this.verLessThan("1.14"));
+        if (climbing && player.onClimbable) {
           // TODO: or in powder with leather boots.
           player.vel.y = 0.2;
         }

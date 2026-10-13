@@ -22,6 +22,8 @@ function climbRig(version: string, z: number, column: Array<[string, Record<stri
 
 const ladder = (count: number): Array<[string, Record<string, string>]> =>
   Array.from({ length: count }, () => ["ladder", { facing: "west", waterlogged: "false" }]);
+const vine = (count: number): Array<[string, Record<string, string>]> =>
+  Array.from({ length: count }, () => ["vine", { east: "true", north: "false", south: "false", west: "false", up: "false" }]);
 
 describe("Botcraft climbing", () => {
   // LivingEntity.travel looks the climbable block up where the player is, so a jump at the foot of a ladder climbs on
@@ -33,6 +35,18 @@ describe("Botcraft climbing", () => {
       tick();
       expect(state.pos.y).toBe(101.41999998688698);
       expect(state.vel.y).toBe(0.11760000228881837);
+    });
+  }
+
+  // Before 1.14 only a horizontal collision climbs: holding jump at the foot of a vine is a plain jump.
+  for (const version of ["1.12.2", "1.13.2"]) {
+    it(`does not climb on the jump key before 1.14 (${version}, b_climb_jump_up_vine[east=true])`, () => {
+      const { state, tick } = climbRig(version, 1761.5, vine(5));
+      state.control.jump = true;
+      tick();
+      tick();
+      expect(state.pos.y).toBe(101.7531999805212);
+      expect(state.vel.y).toBe(0.24813599859094576);
     });
   }
 });
