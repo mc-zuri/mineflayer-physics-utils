@@ -18,7 +18,8 @@ describe("Botcraft ice sliding", () => {
     const friction = Math.fround(Math.fround(0.98) * Math.fround(0.91));
     let expectedX = playerState.pos.x;
     let expectedVelocity = 0.2;
-    playerState.vel.set(expectedVelocity, 0, 0);
+    // standing: the last tick ended with gravity, so the move keeps the player on the ground
+    playerState.vel.set(expectedVelocity, -0.0784000015258789, 0);
 
     for (let tick = 0; tick < 20; tick++) {
       expectedX += expectedVelocity;

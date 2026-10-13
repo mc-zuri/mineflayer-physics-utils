@@ -1399,12 +1399,9 @@ export class BotcraftPhysics implements IPhysics {
     // TODO: add minor horizontal collision check
     {
       // Entity::setOnGroundWithKnownMovement
-      const wasOnGround = player.onGround;
-      const groundedByCollision = movementBeforeCollisions.y < 0.0 && collisionY;
-      const shouldCheckStandingSupport = wasOnGround && Math.abs(movementBeforeCollisions.y) <= 1e-7;
-
-      player.onGround = groundedByCollision;
-      if (player.onGround || shouldCheckStandingSupport) {
+      // a move without vertical motion leaves the ground, as vanilla's onGround = verticalCollision && dy < 0
+      player.onGround = movementBeforeCollisions.y < 0.0 && collisionY;
+      if (player.onGround) {
         const halfWidth = player.halfWidth;
         const feetSliceAABB = new AABB(
           player.pos.x - halfWidth,
