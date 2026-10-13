@@ -1558,7 +1558,7 @@ export class BotcraftPhysics implements IPhysics {
       if (player.control.sneak) {
         player.vel.y = 0.0;
       } else {
-        const blockBelow = world.getBlock(player.pos.offset(0, -0.2, 0));
+        const blockBelow = world.getBlock(this.getOnPosLegacy(player, world));
         let newSpeed = 0.0;
         if (blockBelow != null) {
           if (this.slimeBlockId === blockBelow.type) {
@@ -1592,12 +1592,32 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
+   * Entity.getOnPosLegacy: the block landed and stepped on, 0.2F under the feet. From 1.20 in the supporting block's
+   * column (the supporting block itself when it is a fence, wall or fence gate); before, a fence, wall or fence gate
+   * under an air block.
+   */
+  private getOnPosLegacy(player: PlayerState, world: World): Vec3 {
+    const y = Math.floor(player.pos.y - 0.20000000298023224);
+    const fenceLike = (block: Block | null) => block != null && /(^|_)fence$|_wall$|fence_gate$/.test(block.name);
+    const support = player.supportingBlockPos;
+    if (support != null) {
+      return fenceLike(world.getBlock(support)) ? support : new Vec3(support.x, y, support.z);
+    }
+    const pos = new Vec3(Math.floor(player.pos.x), y, Math.floor(player.pos.z));
+    if (this.verLessThan("1.20") && /^(air|cave_air|void_air)$/.test(world.getBlock(pos)?.name ?? "")) {
+      const below = pos.offset(0, -1, 0);
+      if (fenceLike(world.getBlock(below))) return below;
+    }
+    return pos;
+  }
+
+  /**
    * Block.stepOn of the block below (getOnPosLegacy) while on ground. SlimeBlock's: unless sneaking, a vertical speed
    * under 0.1 scales the horizontal motion by 0.4 + |vy| * 0.2.
    */
   private stepOn(player: PlayerState, world: World) {
     if (!player.onGround || player.control.sneak) return;
-    const block = world.getBlock(player.pos.offset(0, -0.2, 0));
+    const block = world.getBlock(this.getOnPosLegacy(player, world));
     if (block == null || block.type !== this.slimeBlockId) return;
     const speedY = Math.abs(player.vel.y);
     if (speedY < 0.1) {
