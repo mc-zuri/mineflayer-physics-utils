@@ -1540,6 +1540,10 @@ export class BotcraftPhysics implements IPhysics {
                 player.vel.y = -0.05; // magic number.
               }
             }
+          } else if (this.soulsandId === block.type && this.verLessThan("1.15")) {
+            // SoulSandBlock::entityInside before the block speed factor: each soul sand block touched slows by 0.4D
+            player.vel.x *= 0.4;
+            player.vel.z *= 0.4;
           } else if (this.berryBushId === block.type) {
             // BerryBushBlock::entityInside
             player.stuckSpeedMultiplier = new Vec3(0.800000011920929, 0.75, 0.800000011920929); // magic number

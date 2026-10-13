@@ -25,6 +25,13 @@ function walkOn(version: string, block: string, z: number, height: number, attri
 }
 
 describe("Botcraft block speed factor", () => {
+  // Before 1.15 soul sand slows from SoulSandBlock.entityInside, multiplying the motion by 0.4D during the move.
+  for (const version of ["1.12.2", "1.13.2"]) {
+    it(`slows a walk on soul sand as vanilla (${version}, s_walk_soul_sand)`, () => {
+      expect(walkOn(version, "soul_sand", 1173.5, 0.875)).toBe(0.021403200299072014);
+    });
+  }
+
   for (const version of ["1.20.4", "1.21.11"]) {
     it(`slows a walk on soul sand as vanilla (${version}, s_walk_soul_sand)`, () => {
       expect(walkOn(version, "soul_sand", 1173.5, 0.875)).toBe(0.021403203540468353);
