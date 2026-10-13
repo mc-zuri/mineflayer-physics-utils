@@ -915,7 +915,9 @@ export class BotcraftPhysics implements IPhysics {
             player.vel.z += Math.fround(this.mth.cos(yaw) * Math.fround(0.2));
           }
         } else {
-          const value = Math.fround(entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42));
+          // the jump strength attribute, with its modifiers
+          const synced = entity.attributes[this.jumpStrengthAttribute];
+          const value = Math.fround(synced ? attributes.getAttributeValue(synced) : Math.fround(0.42));
           const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
           if (jumpPower > 1e-5) {
             player.vel.y = Math.max(jumpPower, player.vel.y);
