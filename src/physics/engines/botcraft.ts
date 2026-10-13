@@ -467,6 +467,10 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
+    // the fluid height getFluidHeight reads, kept for the jump
+    if (water) player.waterHeight = fluidRelativeHeight;
+    else player.lavaHeight = fluidRelativeHeight;
+
     if (push.norm() > 0.0) {
       if (numPush > 0) {
         push.scale(1.0 / numPush);
@@ -1185,9 +1189,10 @@ export class BotcraftPhysics implements IPhysics {
         return;
       }
 
-      if (player.isInWater || player.isInLava) {
-        player.vel.y += 0.03999999910593033; // magic number
-      } else if (player.onGround && player.jumpTicks === 0) {
+      const liquidJump = this.liquidJump(player);
+      if (liquidJump === "swim") {
+        player.vel.y += 0.03999999910593033; // jumpInLiquid
+      } else if (liquidJump === "ground" && player.jumpTicks === 0) {
         const blockJumpFactor = this.getBlockJumpFactor(player, world, worldSettings);
         // the jump boost, 0.1F per level in float (in mineflayer, level 1 is 1, not 0)
         const jumpBoost = Math.fround(Math.fround(0.1) * player.jumpBoost);
@@ -1223,6 +1228,31 @@ export class BotcraftPhysics implements IPhysics {
         player.jumpTicks = worldSettings.autojumpCooldown;
       }
     }
+  }
+
+  /**
+   * LivingEntity.aiStep's jump in fluids: swim up (jumpInLiquid) or jump from the ground. Before 1.13 any water or
+   * lava swims up. 1.13 - 1.15 swim up in water deeper than 0.4 or off the ground, then in any lava, and jump from
+   * the ground or from water up to 0.4 deep. 1.16+ take the height of the fluid the player is in (lava first) against
+   * getFluidJumpThreshold (0.4, or 0 for eyes lower than 0.4).
+   */
+  private liquidJump(player: PlayerState): "swim" | "ground" | "none" {
+    if (this.verLessThan("1.13")) {
+      if (player.isInWater || player.isInLava) return "swim";
+      return player.onGround ? "ground" : "none";
+    }
+    if (this.verLessThan("1.16")) {
+      const height = player.waterHeight;
+      if (height > 0 && (!player.onGround || height > 0.4)) return "swim";
+      if (player.isInLava) return "swim";
+      return player.onGround || (height > 0 && height <= 0.4) ? "ground" : "none";
+    }
+    const height = player.isInLava ? player.lavaHeight : player.waterHeight;
+    const inWater = player.isInWater && height > 0;
+    const threshold = Math.fround(player.eyeHeight) < 0.4 ? 0.0 : 0.4;
+    if (inWater && !(player.onGround && !(height > threshold))) return "swim";
+    if (player.isInLava && !(player.onGround && !(height > threshold))) return "swim";
+    return player.onGround || (inWater && height <= threshold) ? "ground" : "none";
   }
 
   private getBlockJumpFactor(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {

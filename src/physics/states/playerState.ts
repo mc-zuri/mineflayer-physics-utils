@@ -96,6 +96,9 @@ export class PlayerState implements IEntityState {
     public isUnderWater: boolean = false;
     /** Whether the eyes were in water at the last tick start (vanilla's fluidOnEyes); undefined before the first. */
     public eyeInWater?: boolean;
+    /** How deep the box is in water and in lava (vanilla's getFluidHeight), from the last fluid update. */
+    public waterHeight: number = 0;
+    public lavaHeight: number = 0;
     public isInLava: boolean = false;
     public isUnderLava: boolean = false;
     public isInWeb: boolean = false;
