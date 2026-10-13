@@ -600,6 +600,8 @@ export class BotcraftPhysics implements IPhysics {
 
       const velY = player.vel.y;
       this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
+      // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
+      if (!this.verLessThan("1.21.2")) this.stepOn(player, world);
       if (player.flying) {
         player.vel.y = 0.6 * velY;
         /* player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying, false); */ player.fallFlying = false;
@@ -1584,6 +1586,9 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
+    // Entity.move steps on the block below after the landing, until 1.21.2 moved it after the whole travel
+    if (this.verLessThan("1.21.2")) this.stepOn(player, world);
+
     // Vanilla refreshes water contact here, before travel applies friction, except in 1.21.4.
     // https://github.com/GrimAnticheat/Grim/blob/2fe3b3e5ab9bd4ea692d712712645cf38209378b/common/src/main/java/ac/grim/grimac/predictionengine/movementtick/MovementTicker.java#L172-L184
     if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
@@ -1598,6 +1603,22 @@ export class BotcraftPhysics implements IPhysics {
       const blockSpeedFactor = this.getBlockSpeedFactor(player, world);
       player.vel.x *= blockSpeedFactor;
       player.vel.z *= blockSpeedFactor;
+    }
+  }
+
+  /**
+   * Block.stepOn of the block below (getOnPosLegacy) while on ground. SlimeBlock's: unless sneaking, a vertical speed
+   * under 0.1 scales the horizontal motion by 0.4 + |vy| * 0.2.
+   */
+  private stepOn(player: PlayerState, world: World) {
+    if (!player.onGround || player.control.sneak) return;
+    const block = world.getBlock(player.pos.offset(0, -0.2, 0));
+    if (block == null || block.type !== this.slimeBlockId) return;
+    const speedY = Math.abs(player.vel.y);
+    if (speedY < 0.1) {
+      const factor = 0.4 + speedY * 0.2;
+      player.vel.x *= factor;
+      player.vel.z *= factor;
     }
   }
 
