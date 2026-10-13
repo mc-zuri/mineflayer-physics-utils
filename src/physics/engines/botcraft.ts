@@ -625,6 +625,8 @@ export class BotcraftPhysics implements IPhysics {
 
   private localPlayerAIStep(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
+    // before 1.19.4 Player.aiStep sets the air speed after travel: the sprint of the tick before moves this tick
+    const sprintedBefore = player.sprinting;
     const tickStartedOnGround = player.onGround;
     const heading = convInpToAxes(player);
     player.heading = heading;
@@ -704,7 +706,7 @@ export class BotcraftPhysics implements IPhysics {
       }
 
       const velY = player.vel.y;
-      this.movePlayer(ctx, world); // TODO: should be in player-specific logic??
+      this.movePlayer(ctx, world, sprintedBefore); // TODO: should be in player-specific logic??
       // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
       if (!this.verLessThan("1.21.2")) this.stepOn(player, world);
       if (player.flying) {
@@ -1254,12 +1256,13 @@ export class BotcraftPhysics implements IPhysics {
     return f32(movementSpeed * f32(f32(0.21600002) / f32(f32(f * f) * f)));
   }
 
-  private getOffGroundSpeed(player: PlayerState) {
+  private getOffGroundSpeed(player: PlayerState, sprintedBefore = player.sprinting) {
     if (player.flying) {
       return player.sprinting ? player.flySpeed * 2.0 : player.flySpeed;
     }
 
-    return player.sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
+    const sprinting = this.verLessThan("1.19.4") ? sprintedBefore : player.sprinting;
+    return sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
   }
 
   private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
@@ -1311,7 +1314,7 @@ export class BotcraftPhysics implements IPhysics {
    * @param ctx
    * @param world
    */
-  movePlayer(ctx: EPhysicsCtx, world: World) {
+  movePlayer(ctx: EPhysicsCtx, world: World, sprintedBefore?: boolean) {
     const player = ctx.state as PlayerState;
     {
       // LivingEntity::travel
@@ -1443,7 +1446,7 @@ export class BotcraftPhysics implements IPhysics {
         if (player.lastOnGround) {
           inputStrength = this.getFrictionInfluencedSpeed(movementSpeedAttr, friction);
         } else {
-          inputStrength = this.getOffGroundSpeed(player);
+          inputStrength = this.getOffGroundSpeed(player, sprintedBefore);
         }
 
        
