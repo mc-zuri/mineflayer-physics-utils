@@ -907,12 +907,10 @@ export class BotcraftPhysics implements IPhysics {
           const jumpPower = floatSum ? Math.fround(power + jumpBoost) : power + jumpBoost;
           player.vel.y = Math.max(jumpPower, player.vel.y);
           if (player.sprinting) {
-            const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
-            // potential inconsistency here. This may not be accurate.
-            const offsetX = Math.fround(Math.sin(yawRad)) * 0.2;
-            const offsetZ = Math.fround(Math.cos(yawRad)) * 0.2;
-            player.vel.x -= offsetX
-            player.vel.z += offsetZ
+            // Mth.sin/cos of the float yaw, times 0.2F in float
+            const yaw = floatRadians(this.yawDegrees(player));
+            player.vel.x += Math.fround(-this.mth.sin(yaw) * Math.fround(0.2));
+            player.vel.z += Math.fround(this.mth.cos(yaw) * Math.fround(0.2));
           }
         } else {
           const value = Math.fround(entity.attributes[this.jumpStrengthAttribute]?.value ?? Math.fround(0.42));
@@ -920,9 +918,10 @@ export class BotcraftPhysics implements IPhysics {
           if (jumpPower > 1e-5) {
             player.vel.y = Math.max(jumpPower, player.vel.y);
             if (player.sprinting) {
-              const yawRad = Math.PI - player.yaw; // should already be in yaw. MINEFLAYER SPECIFC CHANGE, MATH.PI -
-              player.vel.x -= Math.sin(yawRad) * 0.2;
-              player.vel.z += Math.cos(yawRad) * 0.2;
+              // Mth.sin/cos of the float yaw, times 0.2 in double
+              const yaw = floatRadians(this.yawDegrees(player));
+              player.vel.x += -this.mth.sin(yaw) * 0.2;
+              player.vel.z += this.mth.cos(yaw) * 0.2;
             }
           }
         }

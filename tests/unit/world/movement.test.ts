@@ -41,30 +41,22 @@ describe("World movement simulation", () => {
     expect(rig.playerState.vel.z).toBe(0.15321675645889346);
   });
 
-  it("supports sprint-jumping", () => {
-    const rig = createBotcraftPlayerRig({
-      version,
-      position: new Vec3(0, groundLevel, 0),
-      groundLevel,
-    });
+  it("sprint-jumps on stone as vanilla (j_jump_sprint_f)", () => {
+    const world = createFlatWorld(version, recordedFloor);
+    const rig = recordedRig(new Vec3(0.5, recordedFloor, 38.5), { forward: true, sprint: true });
 
-    rig.playerState.control.forward = true;
-    rig.playerState.control.sprint = true;
-
-    for (let i = 0; i < 4; i++) {
-      rig.physics.simulate(rig.playerCtx, fakeWorld as any);
-      rig.playerState.apply(rig.fakePlayer);
+    for (let tick = 1; tick <= 22; tick++) {
+      rig.playerState.control.jump = tick === 11;
+      rig.physics.simulate(rig.playerCtx, world as any);
+      if (tick === 11) {
+        expect(rig.playerState.pos).toEqual(new Vec3(0.5, 101.41999998688698, 41.4497361062116));
+        expect(rig.playerState.vel.z).toBe(0.26221978907118254);
+      }
     }
 
-    rig.playerState.control.jump = true;
-
-    for (let i = 0; i < 12; i++) {
-      rig.physics.simulate(rig.playerCtx, fakeWorld as any);
-      rig.playerState.apply(rig.fakePlayer);
-    }
-
-    expect(rig.fakePlayer.entity.position.y).toEqual(groundLevel);
-    expect(rig.fakePlayer.entity.position.z).toBeCloseTo(-4.377196331671886, 8);
+    expect(rig.playerState.onGround).toBe(true);
+    expect(rig.playerState.pos).toEqual(new Vec3(0.5, recordedFloor, 44.59687628449334));
+    expect(rig.playerState.vel.z).toBe(0.2592572383979158);
   });
 
   // pb_walk_off_edge / pb_sprint_off_edge: off the south edge of a stone platform (y 105, x -5..5, z 148..158) onto
