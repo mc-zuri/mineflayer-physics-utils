@@ -332,6 +332,11 @@ export class BotcraftPhysics implements IPhysics {
 
     const playerFlag = ctx.entityType.type === "player";
 
+    // the rockets the client's entity list ticks before the player boost it before its own tick
+    if (playerFlag && entity instanceof PlayerState && entity.fireworkRocketsBeforePlayer > 0) {
+      this.applyFireworkBoost(entity, entity.fireworkRocketsBeforePlayer);
+    }
+
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
     if (!this.verLessThan("1.13") && ctx.state instanceof PlayerState) this.updateFluidOnEyes(ctx.state, world);
@@ -1097,7 +1102,8 @@ export class BotcraftPhysics implements IPhysics {
     vel.z *= 0.9900000095367432;
   }
 
-  private applyFireworkBoost(player: PlayerState) {
+  /** FireworkRocketEntity.tick of each of the given rockets: toward 1.5 times the float look vector. */
+  private applyFireworkBoost(player: PlayerState, rockets: number) {
     if (player.fireworkRocketDuration <= 0) return;
 
     if (!player.fallFlying) {
@@ -1105,15 +1111,12 @@ export class BotcraftPhysics implements IPhysics {
       return;
     }
 
-    // FireworkRocketEntity.tick, once per attached rocket: toward 1.5 times the float look vector
     const look = this.lookAngle(player);
-    const rockets = player.fireworkRockets > 0 ? player.fireworkRockets : 1;
     for (let i = 0; i < rockets; i++) {
       player.vel.x += look.x * 0.1 + (look.x * 1.5 - player.vel.x) * 0.5;
       player.vel.y += look.y * 0.1 + (look.y * 1.5 - player.vel.y) * 0.5;
       player.vel.z += look.z * 0.1 + (look.z * 1.5 - player.vel.z) * 0.5;
     }
-    --player.fireworkRocketDuration;
   }
 
   private shouldStopRunSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
@@ -1578,7 +1581,10 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.y *= 0.9800000190734863;
       }
 
-      this.applyFireworkBoost(player);
+      // the other attached rockets tick after the player (one while the duration runs, unless counted)
+      const rockets = player.fireworkRockets > 0 ? player.fireworkRockets : 1;
+      this.applyFireworkBoost(player, rockets - player.fireworkRocketsBeforePlayer);
+      if (player.fireworkRocketDuration > 0) --player.fireworkRocketDuration;
     }
   }
 

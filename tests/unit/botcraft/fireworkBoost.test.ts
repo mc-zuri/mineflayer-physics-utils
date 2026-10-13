@@ -30,6 +30,35 @@ const recorded: { version: string; tick: number; pos: Vec; vel: Vec; nextPos: Ve
 ];
 
 describe("Botcraft firework boost", () => {
+  it("boosts before the player's tick for a rocket the client ticks first (1.16.5, f_elytra_rocket_level tick 10)", () => {
+    // the same state as 1.15.2's tick 10, but the rocket (id 9) comes before the player (id 1) in the client's
+    // entity map, so the player moves with the boosted motion
+    const version = "1.16.5";
+    const rig = createBotcraftPlayerRig({
+      version,
+      position: new Vec3(0.5, 129.97902839906502, 2220.825563150126),
+      groundLevel,
+    });
+    const state = rig.playerState;
+    state.vel = new Vec3(0, -0.2707647785947148, 0.1023209011145955);
+    state.onGround = false;
+    state.validElytraEquipped = true;
+    state.fallFlying = true;
+    state.pose = PlayerPoses.FALL_FLYING;
+    state.fireworkRocketDuration = 1;
+    state.fireworkRockets = 1;
+    state.fireworkRocketsBeforePlayer = 1;
+    state.yawDegrees = 0;
+    state.pitch = (10 * Math.PI) / 180;
+
+    rig.physics.simulate(rig.playerCtx, createFlatWorld(version, groundLevel) as any);
+
+    expect(state.vel.y).toBe(0.010823478153483744);
+    expect(state.vel.z).toBe(0.8746928813511641);
+    expect(state.pos.y).toBe(129.9898518772185);
+    expect(state.pos.z).toBe(2221.7002560314772);
+  });
+
   it("boosts once per attached rocket (1.21.11, f_elytra_rocket_twice tick 37)", () => {
     const version = "1.21.11";
     const rig = createBotcraftPlayerRig({

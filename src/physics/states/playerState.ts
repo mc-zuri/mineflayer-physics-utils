@@ -106,6 +106,8 @@ export class PlayerState implements IEntityState {
     public fireworkRocketDuration: number = 0;
     /** How many rockets fly attached to the player this tick, each boosting it (0: one while the duration runs). */
     public fireworkRockets: number = 0;
+    /** How many of those the client ticks before the player (its entity list order), boosting before its tick. */
+    public fireworkRocketsBeforePlayer: number = 0;
     public isCollidedHorizontally: boolean = false;
     public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
@@ -436,6 +438,7 @@ export class PlayerState implements IEntityState {
         tmp.validElytraEquipped = this.validElytraEquipped;
         tmp.fireworkRocketDuration = this.fireworkRocketDuration;
         tmp.fireworkRockets = this.fireworkRockets;
+        tmp.fireworkRocketsBeforePlayer = this.fireworkRocketsBeforePlayer;
         tmp.isCollidedHorizontally = this.isCollidedHorizontally;
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
@@ -511,6 +514,7 @@ export class PlayerState implements IEntityState {
         this.validElytraEquipped = other.validElytraEquipped;
         this.fireworkRocketDuration = other.fireworkRocketDuration;
         this.fireworkRockets = other.fireworkRockets;
+        this.fireworkRocketsBeforePlayer = other.fireworkRocketsBeforePlayer;
         this.isCollidedHorizontally = other.isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
