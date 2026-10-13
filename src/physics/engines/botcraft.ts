@@ -31,6 +31,7 @@ type World = { getBlock: world.WorldSync["getBlock"]};
 const COLLISION_EPSILON = 1e-7;
 /** The default world border's distance from 0 on x and z (WorldBorder's max radius). */
 const WORLD_BORDER_RADIUS = 29999984;
+type AABBPoints = [number, number, number, number, number, number];
 
 /** Boats, chest boats and rafts: "boat" before 1.21.2, then one type per wood ("oak_boat", "bamboo_chest_raft"). */
 const isBoatName = (name: string) => /(^|_)(boat|raft)$/.test(name);
@@ -78,6 +79,8 @@ export class BotcraftPhysics implements IPhysics {
   protected vineId: number;
   protected scaffoldId: number;
   protected climbableIds: Set<number>;
+  /** The blocks whose shapes vanilla moves by a per-column offset (OffsetType.XZ), with their maximum offset. */
+  protected offsetBlocks: Map<number, number>;
   /** The player simulated, whose collision context shapes the blocks it collides with (EntityCollisionContext). */
   private collider: PlayerState | null = null;
   protected bubblecolumnId: number;
@@ -127,6 +130,10 @@ export class BotcraftPhysics implements IPhysics {
     // BlockTags.CLIMBABLE (1.16+; ladder, vine and scaffolding before): each block from the version that adds it
     const climbables = ["ladder", "vine", "scaffolding", "weeping_vines", "weeping_vines_plant", "twisting_vines",
       "twisting_vines_plant", "cave_vines", "cave_vines_plant"];
+    // bamboo (1.14+, Block.getMaxHorizontalOffset 0.25F) and pointed dripstone (1.17+, 0.125F)
+    this.offsetBlocks = new Map();
+    if (blocksByName.bamboo) this.offsetBlocks.set(blocksByName.bamboo.id, 0.25);
+    if (blocksByName.pointed_dripstone) this.offsetBlocks.set(blocksByName.pointed_dripstone.id, 0.125);
     this.climbableIds = new Set(climbables.filter((name) => blocksByName[name] != null).map((name) => blocksByName[name].id));
     this.airId = blocksByName.air.id;
     this.waterLike = new Set();
@@ -176,8 +183,7 @@ export class BotcraftPhysics implements IPhysics {
           const block = world.getBlock(cursor) as Block | null;
           if (block != null) {
             const blockPos = block.position;
-            const shapes = block.type === this.scaffoldId && this.collider ? this.scaffoldingShapes(block, this.collider) : block.shapes;
-            for (const shape of shapes) {
+            for (const shape of this.collisionShapes(block, blockPos)) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
               blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
               surroundingBBs.push(blockBB);
@@ -187,6 +193,34 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
     return surroundingBBs;
+  }
+
+  /** The block's collision shapes where it is, for the player simulated. */
+  private collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
+    if (block.type === this.scaffoldId && this.collider) return this.scaffoldingShapes(block, this.collider) as AABBPoints[];
+    const maxOffset = this.offsetBlocks.get(block.type);
+    if (maxOffset == null) return block.shapes as AABBPoints[];
+    // minecraft-data's shapes carry the offset of the column at x 0, z 0
+    const [x, z] = this.horizontalOffset(pos.x, pos.z, maxOffset);
+    const [x0, z0] = this.horizontalOffset(0, 0, maxOffset);
+    return block.shapes.map(([minX, minY, minZ, maxX, maxY, maxZ]): AABBPoints => [
+      minX - x0 + x, minY, minZ - z0 + z, maxX - x0 + x, maxY, maxZ - z0 + z,
+    ]);
+  }
+
+  /**
+   * BlockBehaviour's OffsetType.XZ offset of a column: from Mth.getSeed(x, 0, z), each axis (n / 15F - 0.5) * 0.5 for
+   * a 4-bit n, clamped to the block's maximum offset (since 1.17; within it anyway before).
+   */
+  private horizontalOffset(x: number, z: number, maxOffset: number): [number, number] {
+    const big = BigInt;
+    let seed = big.asIntN(32, big(x) * big(3129871)) ^ (big(z) * big(116129781));
+    seed = big.asIntN(64, seed * seed * big(42317861) + seed * big(11)) >> big(16);
+    const axis = (bits: bigint) => {
+      const offset = (Math.fround(Math.fround(Number(bits & big(15))) / 15) - 0.5) * 0.5;
+      return Math.min(Math.max(offset, -maxOffset), maxOffset);
+    };
+    return [axis(seed), axis(seed >> big(8))];
   }
 
   /**
@@ -2080,7 +2114,7 @@ export class BotcraftPhysics implements IPhysics {
       for (cursor.z = Math.floor(query.minZ); cursor.z <= Math.floor(query.maxZ); ++cursor.z) {
         for (cursor.x = Math.floor(query.minX); cursor.x <= Math.floor(query.maxX); ++cursor.x) {
           const block = world.getBlock(cursor) as Block | null;
-          const shapes = outsideBorder(cursor.x, cursor.z) ? [[0, 0, 0, 1, 1, 1]] : block?.shapes ?? [];
+          const shapes = outsideBorder(cursor.x, cursor.z) ? [[0, 0, 0, 1, 1, 1]] : block ? this.collisionShapes(block, cursor) : [];
           const boxes = shapes.map((shape) => new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z));
           if (!voxels) {
             partial.push(...boxes.filter((box) => box.intersects(query)));
@@ -2150,11 +2184,13 @@ export class BotcraftPhysics implements IPhysics {
       for (cursor.z = Math.floor(query.minZ - 1e-7) - 1; cursor.z <= Math.floor(query.maxZ + 1e-7) + 1; cursor.z++) {
         for (cursor.x = Math.floor(query.minX - 1e-7) - 1; cursor.x <= Math.floor(query.maxX + 1e-7) + 1; cursor.x++) {
           const block = world.getBlock(cursor);
-          if (block == null || block.shapes.length === 0) continue;
-          const boxes = block.shapes.map((shape) => AABB.fromShape(shape).translate(cursor.x, cursor.y, cursor.z));
+          if (block == null) continue;
+          const shapes = this.collisionShapes(block, cursor);
+          if (shapes.length === 0) continue;
+          const boxes = shapes.map((shape) => AABB.fromShape(shape).translate(cursor.x, cursor.y, cursor.z));
           if (!boxes.some((box) => box.intersects(query))) continue;
           colliders.push(...boxes);
-          for (const [minX, minY, minZ, maxX, maxY, maxZ] of block.shapes) {
+          for (const [minX, minY, minZ, maxX, maxY, maxZ] of shapes) {
             const yBits = bits(minY, maxY);
             const faces = yBits >= 0 && bits(minX, maxX) >= 0 && bits(minZ, maxZ) >= 0
               ? Array.from({ length: (1 << yBits) + 1 }, (_, i) => i / (1 << yBits))
@@ -2449,7 +2485,7 @@ export class BotcraftPhysics implements IPhysics {
           if (edges >= 2) continue; // only moving pistons count there
           const block = world.getBlock(cursor);
           if (block == null) continue;
-          const shapes = block.shapes.map((shape) => AABB.fromShape(shape));
+          const shapes = this.collisionShapes(block, cursor).map((shape) => AABB.fromShape(shape));
           if (edges === 1 && !shapes.some((s) => s.minX < 0 || s.minY < 0 || s.minZ < 0 || s.maxX > 1 || s.maxY > 1 || s.maxZ > 1)) continue;
           if (!shapes.some((shape) => box.intersects(shape.translate(cursor.x, cursor.y, cursor.z)))) continue;
           const dx = cursor.x + 0.5 - position.x;
