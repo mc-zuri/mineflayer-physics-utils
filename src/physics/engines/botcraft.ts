@@ -1910,16 +1910,16 @@ export class BotcraftPhysics implements IPhysics {
     const boundingBox = sizedBox.bb;
     let legacyMovedBox: AABB | null = null;
     if (this.verLessThan("1.14")) {
-      const legacy = this.legacyCollide(world, boundingBox, movement, Math.fround(maxUpStep), player.onGround);
+      const legacy = this.legacyCollide(world, boundingBox, movement, Math.fround(maxUpStep), player.onGround, (swept) => this.otherColliders(player, swept));
       movement = legacy.movement;
       legacyMovedBox = legacy.bb;
     } else { // Entity::collide
       const playerAABB = boundingBox;
       const fuck = playerAABB.clone();
       const hDist = (vec: Vec3) => Math.sqrt(vec.x * vec.x + vec.z * vec.z);
-      // const entityCollisions = world.getEntityCollisions(player, playerAABB.expand(movement));
+      const colliders = this.otherColliders(player, playerAABB.expandTowards(movement));
 
-      let newMovement = movement.norm() ** 2 === 0 ? movement : this.collideBoundingBox(world, playerAABB, movement);
+      let newMovement = movement.norm() ** 2 === 0 ? movement : this.collideBoundingBox(world, playerAABB, movement, colliders);
 
 
       const collisionX = Math.abs(movement.x - newMovement.x) > 1e-7;
@@ -1930,12 +1930,13 @@ export class BotcraftPhysics implements IPhysics {
 
 
       if (maxUpStep > 0 && onGround && (collisionX || collisionZ) && !this.verLessThan("1.21")) {
-        newMovement = this.stepUp(world, playerAABB, movement, newMovement, collisionY && movement.y < 0, maxUpStep);
+        newMovement = this.stepUp(world, playerAABB, movement, newMovement, collisionY && movement.y < 0, maxUpStep, colliders);
       } else if (maxUpStep > 0 && onGround && (collisionX || collisionZ)) {
         let stepUpMovement = this.collideBoundingBox(
           world,
           playerAABB,
           new Vec3(movement.x, maxUpStep, movement.z),
+          colliders,
         );
 
         const expand = playerAABB.expandTowardsCoords(movement.x, 0, movement.z)
@@ -1943,6 +1944,7 @@ export class BotcraftPhysics implements IPhysics {
           world,
           expand,
           new Vec3(0, maxUpStep, 0),
+          colliders,
         );
 
         if (stepOnlyMovement.y < maxUpStep) {
@@ -1951,6 +1953,7 @@ export class BotcraftPhysics implements IPhysics {
 
             playerAABB.move(stepOnlyMovement),
             new Vec3(movement.x, 0, movement.z),
+            colliders,
           ).add(stepOnlyMovement);
 
           if (hDist(adjustedStepUp) > hDist(stepUpMovement)) {
@@ -1964,6 +1967,7 @@ export class BotcraftPhysics implements IPhysics {
               world,
               playerAABB.move(stepUpMovement),
               new Vec3(0, -stepUpMovement.y + movement.y, 0),
+              colliders,
             )
           );
         }
@@ -2477,9 +2481,9 @@ export class BotcraftPhysics implements IPhysics {
    * the longer horizontal one, settles it down and keeps it only if it goes farther than the first.
    * Returns the moved box and the movement it made.
    */
-  private legacyCollide(world: World, bb: AABB, requested: Vec3, stepHeight: number, onGround: boolean) {
+  private legacyCollide(world: World, bb: AABB, requested: Vec3, stepHeight: number, onGround: boolean, others: (swept: AABB) => AABB[] = () => []) {
     const { x: m, y: n, z: o } = requested;
-    const colliders = this.legacyColliders(world, bb, m, n, o);
+    const colliders = this.legacyColliders(world, bb, m, n, o, others);
     let box = bb;
     let x = m;
     let y = n;
@@ -2499,7 +2503,7 @@ export class BotcraftPhysics implements IPhysics {
 
     const landing = onGround || (n !== y && n < 0);
     if (stepHeight > 0 && landing && (m !== x || o !== z)) {
-      const stepColliders = this.legacyColliders(world, bb, m, stepHeight, o);
+      const stepColliders = this.legacyColliders(world, bb, m, stepHeight, o, others);
       const across = (start: AABB, rise: number) => {
         const raised = start.moveCoords(0, rise, 0);
         const dx = this.legacyAxisOffset(0, raised, stepColliders, m);
@@ -2527,7 +2531,7 @@ export class BotcraftPhysics implements IPhysics {
    * swept box, a block outside the world border counting as stone. 1.13's IWorldReaderBase sweeps a box grown by 1e-7,
    * leaves out the blocks bb already reaches into and lists the partial block shapes before the full cubes.
    */
-  private legacyColliders(world: World, bb: AABB, x: number, y: number, z: number): AABB[] {
+  private legacyColliders(world: World, bb: AABB, x: number, y: number, z: number, others: (swept: AABB) => AABB[] = () => []): AABB[] {
     const swept = bb.expandTowardsCoords(x, y, z);
     const voxels = !this.verLessThan("1.13");
     const query = voxels ? swept.clone().expand(COLLISION_EPSILON, COLLISION_EPSILON, COLLISION_EPSILON) : swept;
@@ -2553,7 +2557,7 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
     }
-    return [...partial, ...full];
+    return [...partial, ...full, ...others(swept)];
   }
 
   /**
@@ -2589,7 +2593,7 @@ export class BotcraftPhysics implements IPhysics {
    * further horizontally than the plain collision. A block's faces are its voxel shape's y coordinates: the grid
    * lines of a box aligned to eighths, else the box's bottom and top.
    */
-  private stepUp(world: World, bb: AABB, movement: Vec3, collided: Vec3, landing: boolean, maxUpStep: number): Vec3 {
+  private stepUp(world: World, bb: AABB, movement: Vec3, collided: Vec3, landing: boolean, maxUpStep: number, others: AABB[] = []): Vec3 {
     const f32 = Math.fround;
     const stepHeight = f32(maxUpStep);
     const start = landing ? bb.move(new Vec3(0, collided.y, 0)) : bb;
@@ -2634,6 +2638,15 @@ export class BotcraftPhysics implements IPhysics {
     }
     colliders.push(...this.worldBorderColliders(bb, query));
 
+    // the entity colliders, solid boxes with faces at their bottom and top
+    for (const other of others) {
+      colliders.push(other);
+      for (const face of [other.minY, other.maxY]) {
+        const height = f32(face - start.minY);
+        if (height >= 0 && height !== landingHeight && height <= stepHeight) heights.add(height);
+      }
+    }
+
     const horizontalSqr = (vec: Vec3) => vec.x * vec.x + vec.z * vec.z;
     for (const height of [...heights].sort((a, b) => a - b)) {
       const stepped = this.collideWithShapes(new Vec3(movement.x, height, movement.z), start, colliders);
@@ -2676,6 +2689,18 @@ export class BotcraftPhysics implements IPhysics {
       new AABB(-inf, -inf, -inf, inf, inf, minZ),
       new AABB(-inf, -inf, maxZ, inf, inf, inf),
     ];
+  }
+
+  /**
+   * The colliders other than blocks a move sweeping `swept` can meet (Level.getEntityCollisions): the boxes of the boats
+   * and shulkers near the player (Boat / Shulker canBeCollidedWith, getCollideBox before 1.16, World.getCollisionBoxes
+   * before 1.14) that meet the swept box, grown by 1e-7 since 1.14. They are solid like blocks.
+   */
+  private otherColliders(player: PlayerState, swept: AABB): AABB[] {
+    const query = this.verLessThan("1.14") ? swept : swept.clone().expand(1e-7, 1e-7, 1e-7);
+    return player.nearbyEntities
+      .filter((other) => (isBoatName(other.name) || other.name === "shulker") && query.intersects(other.boundingBox))
+      .map(({ boundingBox: b }) => new AABB(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ));
   }
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3, colliders: AABB[] = []): Vec3 {
