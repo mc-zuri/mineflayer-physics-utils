@@ -295,6 +295,7 @@ export class BotcraftPhysics implements IPhysics {
 
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
+    if (!this.verLessThan("1.13") && ctx.state instanceof PlayerState) this.updateFluidOnEyes(ctx.state, world);
 
     // updateSwimming moved into AiStep.
 
@@ -356,7 +357,7 @@ export class BotcraftPhysics implements IPhysics {
     const aabb = getCollider(player.pose, player.pos).expand(-1e-3, -1e-3, -1e-3); // -0.001
     if (water) {
       player.isInWater = false;
-      player.isUnderWater = false;
+      if (this.verLessThan("1.13")) player.isUnderWater = false; // 1.13+: updateFluidOnEyes
     } else {
       player.isInLava = false;
       player.isUnderLava = false;
@@ -399,7 +400,7 @@ export class BotcraftPhysics implements IPhysics {
 
           if (water) {
             player.isInWater = true;
-            if (fluidHeight + blockPos.y > eyeHeight) {
+            if (this.verLessThan("1.13") && fluidHeight + blockPos.y > eyeHeight) {
               player.isUnderWater = true;
             }
           } else {
@@ -493,6 +494,42 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     return flow.normalize();
+  }
+
+  /**
+   * Entity.updateFluidOnEyes (1.13+), run at the tick start after the fluid states: whether the water at the eyes'
+   * block reaches them, and isUnderWater. 1.13 - 1.15 compare the eyes with the water top plus 0.11111111F and take
+   * the result at once; 1.16+ look 0.1111111119389534 below the eyes (none from 1.21), and isUnderWater is the eye
+   * state of the tick before (wasEyeInWater) while in water.
+   */
+  private updateFluidOnEyes(player: PlayerState, world: World) {
+    const f32 = Math.fround;
+    const wasEyeInWater = player.eyeInWater ?? player.isUnderWater;
+    let eyeY = player.pos.y + f32(player.eyeHeight);
+    if (!this.verLessThan("1.16") && this.verLessThan("1.21")) eyeY -= 0.1111111119389534;
+    const block = world.getBlock(new Vec3(player.pos.x, eyeY, player.pos.z));
+    let eyeInWater = false;
+    if (block != null && this.getRenderedDepth(block) >= 0) {
+      const y = block.position.y;
+      const height = this.getWaterHeight(block, world);
+      if (this.verLessThan("1.14")) eyeInWater = eyeY < f32(y + f32(height + f32(0.11111111)));
+      else if (this.verLessThan("1.16")) eyeInWater = eyeY < f32(f32(y + height) + f32(0.11111111));
+      else eyeInWater = f32(y + height) > eyeY;
+    }
+    player.eyeInWater = eyeInWater;
+    player.isUnderWater = (this.verLessThan("1.16") ? eyeInWater : wasEyeInWater) && player.isInWater;
+  }
+
+  /**
+   * FluidState.getHeight of water: the float amount / 9F (a source or falling water holds 8), or 1 under more water
+   * from 1.14.
+   */
+  private getWaterHeight(block: Block, world: World) {
+    if (!this.verLessThan("1.14")) {
+      const above = world.getBlock(block.position.offset(0, 1, 0));
+      if (above != null && this.getRenderedDepth(above) >= 0) return 1;
+    }
+    return Math.fround((8 - this.getRenderedDepth(block)) / 9);
   }
 
   getLiquidHeightPcent(block: Block) {

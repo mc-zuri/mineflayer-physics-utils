@@ -94,6 +94,8 @@ export class PlayerState implements IEntityState {
     public onClimbable: boolean = false;
     public isInWater: boolean = false;
     public isUnderWater: boolean = false;
+    /** Whether the eyes were in water at the last tick start (vanilla's fluidOnEyes); undefined before the first. */
+    public eyeInWater?: boolean;
     public isInLava: boolean = false;
     public isUnderLava: boolean = false;
     public isInWeb: boolean = false;
@@ -265,6 +267,7 @@ export class PlayerState implements IEntityState {
         this.onClimbable = (bot.entity as any).onClimbable;
         this.isInWater = (bot.entity as any).isInWater;
         this.isUnderWater = (bot.entity as any).isUnderWater;
+        this.eyeInWater = (bot.entity as { eyeInWater?: boolean }).eyeInWater;
         this.isInLava = (bot.entity as any).isInLava;
         this.isUnderLava = (bot.entity as any).isUnderLava;
         this.isInWeb = (bot.entity as any).isInWeb;
@@ -371,6 +374,7 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).onClimbable = this.onClimbable;
         (bot.entity as any).isInWater = this.isInWater;
         (bot.entity as any).isUnderWater = this.isUnderWater;
+        (bot.entity as { eyeInWater?: boolean }).eyeInWater = this.eyeInWater;
         (bot.entity as any).isInLava = this.isInLava;
         (bot.entity as any).isUnderLava = this.isUnderLava;
         (bot.entity as any).isInWeb = this.isInWeb;
@@ -418,6 +422,7 @@ export class PlayerState implements IEntityState {
         tmp.onClimbable = this.onClimbable;
         tmp.isInWater = this.isInWater;
         tmp.isUnderWater = this.isUnderWater;
+        tmp.eyeInWater = this.eyeInWater;
         tmp.isInLava = this.isInLava;
         tmp.isUnderLava = this.isUnderLava;
         tmp.isInWeb = this.isInWeb;
@@ -490,6 +495,7 @@ export class PlayerState implements IEntityState {
         this.onClimbable = other.onClimbable;
         this.isInWater = other.isInWater;
         this.isUnderWater = other.isUnderWater;
+        this.eyeInWater = other.eyeInWater;
         this.isInLava = other.isInLava;
         this.isUnderLava = other.isUnderLava;
         this.isInWeb = other.isInWeb;
