@@ -1746,6 +1746,26 @@ export class BotcraftPhysics implements IPhysics {
     return { bb: new AABB(bb.minX, bb.minY, bb.minZ, bb.minX + width, bb.minY + height, bb.minZ + width), width, height };
   }
 
+  /**
+   * Entity.refreshDimensions on 1.14 - 1.16, which also runs whenever the pose is set from synced entity data (the
+   * server echoing the player's own pose): the kept bounding box is refitted to the pose's size on its lower corner
+   * (around the position when narrower), even when the size did not change. Call it when such data arrives.
+   */
+  public refreshDimensions(player: PlayerState) {
+    const kept = player.keptBoundingBox;
+    if (this.verLessThan("1.14") || !this.verLessThan("1.17") || kept == null) return;
+    if (kept.pos.x !== player.pos.x || kept.pos.y !== player.pos.y || kept.pos.z !== player.pos.z) return;
+    const width = player.halfWidth * 2;
+    const height = player.height;
+    const { bb } = kept;
+    player.keptBoundingBox = {
+      bb: width < kept.width ? this.boxAt(player.pos, width, height) : new AABB(bb.minX, bb.minY, bb.minZ, bb.minX + width, bb.minY + height, bb.minZ + width),
+      pos: kept.pos,
+      width,
+      height,
+    };
+  }
+
   /** Entity.setPos's box: float half width and height around the position. */
   private boxAt(pos: Vec3, width: number, height: number): AABB {
     const w = width / 2;
