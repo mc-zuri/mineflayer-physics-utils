@@ -775,6 +775,89 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
+  /**
+   * Entity.getLookAngle: the view vector from Mth.sin/cos of the float rotation. Before 1.13 getVectorForRotation
+   * turned it by -yaw - PI and negated the pitch's cosine instead.
+   */
+  private lookAngle(player: PlayerState): { x: number; y: number; z: number } {
+    const f32 = Math.fround;
+    const degToRad = f32(0.017453292);
+    const yaw = this.yawDegrees(player);
+    const pitch = this.pitchDegrees(player);
+    if (this.verLessThan("1.13")) {
+      const yawRad = f32(f32(f32(-yaw) * degToRad) - f32(Math.PI));
+      const pitchRad = f32(f32(-pitch) * degToRad);
+      const pitchCos = -this.mth.cos(pitchRad);
+      return {
+        x: f32(this.mth.sin(yawRad) * pitchCos),
+        y: this.mth.sin(pitchRad),
+        z: f32(this.mth.cos(yawRad) * pitchCos),
+      };
+    }
+    const pitchRad = f32(pitch * degToRad);
+    const yawRad = f32(f32(-yaw) * degToRad);
+    const pitchCos = this.mth.cos(pitchRad);
+    return {
+      x: f32(this.mth.sin(yawRad) * pitchCos),
+      y: -this.mth.sin(pitchRad),
+      z: f32(this.mth.cos(yawRad) * pitchCos),
+    };
+  }
+
+  /**
+   * LivingEntity.travel's fall flying (updateFallFlyingMovement since 1.21.2): lift from the squared cosine of the
+   * pitch (Mth.cos as a float before 1.18.2, Java's Math.cos in double since), the dive turned into speed, the climb
+   * paid for by it, and the motion turned toward the look direction.
+   */
+  private updateFallFlyingMovement(player: PlayerState, gravity: number) {
+    const f32 = Math.fround;
+    const vel = player.vel;
+    const look = this.lookAngle(player);
+    const pitchRad = f32(this.pitchDegrees(player) * f32(0.017453292));
+    const lookHorizontal = Math.sqrt(look.x * look.x + look.z * look.z);
+    const horizontalSpeed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+    // min(1, |look| / 0.4) until 1.21.2: 1 for the unit look vector
+    const lookFactor = Math.min(1.0, Math.sqrt(look.x * look.x + look.y * look.y + look.z * look.z) / 0.4);
+    let lift: number;
+    if (this.verLessThan("1.18.2")) {
+      const cos = this.mth.cos(pitchRad);
+      lift = f32(cos * cos * lookFactor);
+    } else {
+      const cos = Math.cos(pitchRad);
+      lift = cos * cos * (this.verLessThan("1.21.2") ? lookFactor : 1.0);
+    }
+
+    if (this.verLessThan("1.13")) {
+      vel.y += -0.08 + lift * 0.06;
+    } else {
+      vel.y += gravity * (-1.0 + lift * 0.75);
+    }
+
+    if (vel.y < 0.0 && lookHorizontal > 0.0) {
+      const dive = vel.y * -0.1 * lift;
+      vel.x += (look.x * dive) / lookHorizontal;
+      vel.y += dive;
+      vel.z += (look.z * dive) / lookHorizontal;
+    }
+
+    // (before 1.13 without the horizontal look check)
+    if (pitchRad < 0.0 && (lookHorizontal > 0.0 || this.verLessThan("1.13"))) {
+      const climb = horizontalSpeed * -this.mth.sin(pitchRad) * 0.04;
+      vel.x += (-look.x * climb) / lookHorizontal;
+      vel.y += climb * 3.2;
+      vel.z += (-look.z * climb) / lookHorizontal;
+    }
+
+    if (lookHorizontal > 0.0) {
+      vel.x += ((look.x / lookHorizontal) * horizontalSpeed - vel.x) * 0.1;
+      vel.z += ((look.z / lookHorizontal) * horizontalSpeed - vel.z) * 0.1;
+    }
+
+    vel.x *= 0.9900000095367432;
+    vel.y *= 0.9800000190734863;
+    vel.z *= 0.9900000095367432;
+  }
+
   private applyFireworkBoost(player: PlayerState) {
     if (player.fireworkRocketDuration <= 0) return;
 
@@ -1138,37 +1221,7 @@ export class BotcraftPhysics implements IPhysics {
       // elytra flying.
       else if (player.fallFlying) {
         const previousHorizontalSpeed = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
-
-        // slight deviation
-        // sqrt(front_vector.x² + front_vector.z²) to follow vanilla code
-        const { pitch, sinPitch, cosPitch, lookDir } = getLookingVector(player);
-
-        const cosPitchFromLength = Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z);
-        const cosPitchSqr = cosPitch * cosPitch;
-        const hVel = Math.sqrt(player.vel.x * player.vel.x + player.vel.z * player.vel.z);
-        player.vel.y += gravity * (-1 + 0.75 * cosPitchSqr);
-
-        if (player.vel.y < 0.0 && cosPitchFromLength > 0.0) {
-          const deltaSpeed = -player.vel.y * 0.1 * cosPitchSqr;
-          player.vel.x += (lookDir.x * deltaSpeed) / cosPitchFromLength;
-          player.vel.z += (lookDir.z * deltaSpeed) / cosPitchFromLength;
-          player.vel.y += deltaSpeed;
-        }
-
-        if (player.pitch > 0.0 && cosPitchFromLength > 0.0) {
-          const deltaSpeed = hVel * lookDir.y * 0.04;
-          player.vel.x += (-lookDir.x * deltaSpeed) / cosPitchFromLength;
-          player.vel.z += (-lookDir.z * deltaSpeed) / cosPitchFromLength;
-          player.vel.y += deltaSpeed * 3.2; // magic number
-        }
-
-        if (cosPitchFromLength > 0.0) {
-          player.vel.x += ((lookDir.x / cosPitchFromLength) * hVel - player.vel.x) * 0.1;
-          player.vel.z += ((lookDir.z / cosPitchFromLength) * hVel - player.vel.z) * 0.1;
-        }
-        player.vel.x *= Math.fround(0.99); // magic number, this DEFINITELY should be replaced by a drag value.
-        player.vel.z *= Math.fround(0.99); // magic number, this DEFINITELY should be replaced by a drag value.
-        player.vel.y *= Math.fround(0.98); // magic number, this DEFINITELY should be replaced by a drag value.
+        this.updateFallFlyingMovement(player, gravity);
         this.applyMovement(ctx, world);
 
         this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
@@ -1857,6 +1910,11 @@ export class BotcraftPhysics implements IPhysics {
   private yawDegrees(player: PlayerState): number {
     if (player.yawDegrees != null) return player.yawDegrees;
     return Math.fround((Math.PI - player.yaw) * (180 / Math.PI));
+  }
+
+  /** The player's pitch as vanilla holds it: float degrees, positive looking down (mineflayer's radians look up). */
+  private pitchDegrees(player: PlayerState): number {
+    return Math.fround(-player.pitch * (180 / Math.PI));
   }
 
   isInClimbable(player: PlayerState, world: World): boolean {
