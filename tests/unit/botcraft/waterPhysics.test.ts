@@ -106,7 +106,8 @@ describe("Botcraft water physics", () => {
         const testPhysics = physics as unknown as BotcraftTestAccess;
         testPhysics.applySwimmingVerticalSteering(playerCtx, world);
 
-        expect(playerState.vel.y).toBeCloseTo(Math.sin(playerState.pitch) * 0.06, 12);
+        // vanilla takes the look vector from the float Mth.sin table, within 1e-4 of the double sine
+        expect(playerState.vel.y).toBeCloseTo(Math.sin(playerState.pitch) * 0.06, 4);
       });
 
       it("applies all bubble-column surface and interior branches", () => {

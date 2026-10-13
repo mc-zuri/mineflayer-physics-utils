@@ -801,7 +801,7 @@ export class BotcraftPhysics implements IPhysics {
     const player = ctx.state as PlayerState;
     if (!this.isSwimmingAndNotFlying(ctx, world)) return;
 
-    const lookY = getLookingVector(player).lookY;
+    const lookY = this.lookAngle(player).y;
     let shouldAdjust = lookY < 0.0 || player.control.jump;
     if (!shouldAdjust) {
       const blockAbove = world.getBlock(new Vec3(player.pos.x, player.pos.y + 1.0 - 0.1, player.pos.z));
