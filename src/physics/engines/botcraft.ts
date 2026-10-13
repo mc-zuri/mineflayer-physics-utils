@@ -1528,36 +1528,21 @@ export class BotcraftPhysics implements IPhysics {
 
     // TODO: add minor horizontal collision check
     {
-      // Entity::setOnGroundWithKnownMovement
-      // a move without vertical motion leaves the ground, as vanilla's onGround = verticalCollision && dy < 0
+      // Entity::setOnGroundWithKnownMovement: on ground only when the movement down collided (not when a zeroed
+      // vertical speed, as on a slime block, did not move at all)
+      const onGroundNoBlocks = player.onGround && player.supportingBlockPos == null;
       player.onGround = movementBeforeCollisions.y < 0.0 && collisionY;
-      if (player.onGround) {
-        const halfWidth = player.halfWidth;
-        const feetSliceAABB = new AABB(
-          player.pos.x - halfWidth,
-          player.pos.y,
-          player.pos.z - halfWidth,
-          player.pos.x + halfWidth,
-          player.pos.y + 1,
-          player.pos.z + halfWidth
-        );
-        const supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB);
-        // console.log("sBlockPos", feetSliceAABB, supportingBlockPos);
-        if (supportingBlockPos != null || player.onGroundWithoutSupportingBlock) {
-          player.supportingBlockPos = supportingBlockPos;
-        } else {
-
-          player.supportingBlockPos = this.getSupportingBlockPos(world, feetSliceAABB.translate(-movement.x, 0.0, -movement.z));
+      if (player.onGround && !this.verLessThan("1.20")) {
+        // Entity.checkSupportingBlock (1.20+): the block under the box's underside, else (landing from the air or on
+        // a block) under where the box was before the horizontal move
+        const bb = player.getBB();
+        const underside = new AABB(bb.minX, bb.minY - 1.0e-6, bb.minZ, bb.maxX, bb.minY, bb.maxZ);
+        let supportingBlockPos = this.getSupportingBlockPos(world, underside, player.pos);
+        if (supportingBlockPos == null && !onGroundNoBlocks) {
+          supportingBlockPos = this.getSupportingBlockPos(world, underside.translate(-movement.x, 0.0, -movement.z), player.pos);
         }
-
-        if (!player.onGround && player.supportingBlockPos != null) {
-          player.onGround = true;
-        }
-        // unnecessary due to it being a getter.
-        //  player->on_ground_without_supporting_block = !player->supporting_block_pos.has_value();
+        player.supportingBlockPos = supportingBlockPos;
       } else {
-        // player->on_ground_without_supporting_block = false;
-        // player->supporting_block_pos = std::optional<Position>();
         player.supportingBlockPos = null;
       }
     }
@@ -2003,27 +1988,40 @@ export class BotcraftPhysics implements IPhysics {
     return below != null && below.type === this.ladderId && below.getProperties().facing === trapdoor.facing;
   }
 
-  getSupportingBlockPos(world: World, feetSliceAABB: AABB): Vec3 | null {
-    const aabb = feetSliceAABB;
-    const [minAABB, maxAABB] = aabb.minAndMaxArrays();
-    const blockPos = new Vec3(0, 0, 0);
-    let minDistance = Infinity;
-    let ret = null;
-    for (blockPos.y = Math.floor(minAABB[1] - 1); blockPos.y <= Math.floor(maxAABB[1]); ++blockPos.y) {
-      for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
-        for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
-          const block = world.getBlock(blockPos);
-          if (block == null || block.boundingBox === "empty") continue;
-          // console.log('checking block', block.name, block.position)
-          for (const shape of block.shapes) {
-            const bb1 = AABB.fromShape(shape).translateVec(blockPos);
-            if (aabb.collides(bb1)) {
-              const distance = aabb.getCenter().distanceTo(bb1.getCenter());
-              if (distance < minDistance) {
-                minDistance = distance;
-                ret = blockPos.clone();
-              }
-            }
+  /**
+   * CollisionGetter.findSupportingBlock: of the blocks whose collision shape meets the box (BlockCollisions: the cells
+   * the box touches, plus the ring around them for blocks taller than a cube), the one whose centre is closest to the
+   * position; on a tie, the greater position (by y, then z, then x).
+   */
+  getSupportingBlockPos(world: World, box: AABB, position: Vec3): Vec3 | null {
+    const minX = Math.floor(box.minX - 1e-7) - 1;
+    const maxX = Math.floor(box.maxX + 1e-7) + 1;
+    const minY = Math.floor(box.minY - 1e-7) - 1;
+    const maxY = Math.floor(box.maxY + 1e-7) + 1;
+    const minZ = Math.floor(box.minZ - 1e-7) - 1;
+    const maxZ = Math.floor(box.maxZ + 1e-7) + 1;
+    const greater = (a: Vec3, b: Vec3) => (a.y !== b.y ? a.y > b.y : a.z !== b.z ? a.z > b.z : a.x > b.x);
+    const cursor = new Vec3(0, 0, 0);
+    let minDistance = Number.MAX_VALUE;
+    let ret: Vec3 | null = null;
+    for (cursor.z = minZ; cursor.z <= maxZ; ++cursor.z) {
+      for (cursor.y = minY; cursor.y <= maxY; ++cursor.y) {
+        for (cursor.x = minX; cursor.x <= maxX; ++cursor.x) {
+          const edges = Number(cursor.x === minX || cursor.x === maxX) + Number(cursor.y === minY || cursor.y === maxY) +
+            Number(cursor.z === minZ || cursor.z === maxZ);
+          if (edges >= 2) continue; // only moving pistons count there
+          const block = world.getBlock(cursor);
+          if (block == null) continue;
+          const shapes = block.shapes.map((shape) => AABB.fromShape(shape));
+          if (edges === 1 && !shapes.some((s) => s.minX < 0 || s.minY < 0 || s.minZ < 0 || s.maxX > 1 || s.maxY > 1 || s.maxZ > 1)) continue;
+          if (!shapes.some((shape) => box.intersects(shape.translate(cursor.x, cursor.y, cursor.z)))) continue;
+          const dx = cursor.x + 0.5 - position.x;
+          const dy = cursor.y + 0.5 - position.y;
+          const dz = cursor.z + 0.5 - position.z;
+          const distance = dx * dx + dy * dy + dz * dz;
+          if (distance < minDistance || (distance === minDistance && (ret == null || greater(cursor, ret)))) {
+            ret = cursor.clone();
+            minDistance = distance;
           }
         }
       }
