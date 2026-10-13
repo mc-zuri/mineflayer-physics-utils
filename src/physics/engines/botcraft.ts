@@ -1105,11 +1105,14 @@ export class BotcraftPhysics implements IPhysics {
       return;
     }
 
-    // FireworkRocketEntity.tick: toward 1.5 times the float look vector
+    // FireworkRocketEntity.tick, once per attached rocket: toward 1.5 times the float look vector
     const look = this.lookAngle(player);
-    player.vel.x += look.x * 0.1 + (look.x * 1.5 - player.vel.x) * 0.5;
-    player.vel.y += look.y * 0.1 + (look.y * 1.5 - player.vel.y) * 0.5;
-    player.vel.z += look.z * 0.1 + (look.z * 1.5 - player.vel.z) * 0.5;
+    const rockets = player.fireworkRockets > 0 ? player.fireworkRockets : 1;
+    for (let i = 0; i < rockets; i++) {
+      player.vel.x += look.x * 0.1 + (look.x * 1.5 - player.vel.x) * 0.5;
+      player.vel.y += look.y * 0.1 + (look.y * 1.5 - player.vel.y) * 0.5;
+      player.vel.z += look.z * 0.1 + (look.z * 1.5 - player.vel.z) * 0.5;
+    }
     --player.fireworkRocketDuration;
   }
 

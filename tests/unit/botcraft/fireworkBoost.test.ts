@@ -30,6 +30,32 @@ const recorded: { version: string; tick: number; pos: Vec; vel: Vec; nextPos: Ve
 ];
 
 describe("Botcraft firework boost", () => {
+  it("boosts once per attached rocket (1.21.11, f_elytra_rocket_twice tick 37)", () => {
+    const version = "1.21.11";
+    const rig = createBotcraftPlayerRig({
+      version,
+      position: new Vec3(0.5, 136.68275685253738, 2260.1940761299475),
+      groundLevel,
+    });
+    const state = rig.playerState;
+    state.vel = new Vec3(0, 0.30356388539318097, 1.6474889947526832);
+    state.onGround = false;
+    state.validElytraEquipped = true;
+    state.fallFlying = true;
+    state.pose = PlayerPoses.FALL_FLYING;
+    state.fireworkRocketDuration = 1;
+    state.fireworkRockets = 2; // the first rocket's 27th tick, the second's first
+    state.yawDegrees = 0;
+    state.pitch = (10 * Math.PI) / 180;
+
+    rig.physics.simulate(rig.playerCtx, createFlatWorld(version, groundLevel) as any);
+
+    expect(state.vel.y).toBe(0.2993472302292648);
+    expect(state.vel.z).toBe(1.6608232184349778);
+    expect(state.pos.y).toBe(136.99475406722618);
+    expect(state.pos.z).toBe(2261.814896699582);
+  });
+
   for (const { version, tick, pos, vel, nextPos, nextVel } of recorded) {
     it(`boosts toward the float look vector as vanilla (${version}, f_elytra_rocket_level tick ${tick})`, () => {
       const rig = createBotcraftPlayerRig({ version, position: new Vec3(...pos), groundLevel });
