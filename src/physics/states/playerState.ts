@@ -29,8 +29,6 @@ export function convInpToAxes(player: PlayerState): Heading {
     };
   }
 
-const defaultMoves: ControlStateHandler = ControlStateHandler.DEFAULT();
-
 //Utility class that wraps PlayerPoses.
 export class EntityDimensions {
     public readonly width: number;
@@ -119,8 +117,9 @@ export class PlayerState implements IEntityState {
     public pitch: number = 0;
     /** The yaw in float degrees as vanilla holds it (bot.entity.yawDegrees), when the bot keeps it. */
     public yawDegrees?: number;
-    public control: ControlStateHandler = defaultMoves;
-    public prevControl: ControlStateHandler = defaultMoves;
+    // each state its own: the engine writes the keys of the tick before into prevControl
+    public control: ControlStateHandler = ControlStateHandler.DEFAULT();
+    public prevControl: ControlStateHandler = ControlStateHandler.DEFAULT();
     public heading: Heading = { forward: 0, strafe: 0 };
     public prevHeading: Heading = { forward: 0, strafe: 0 };
 
