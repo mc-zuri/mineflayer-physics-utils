@@ -13,6 +13,10 @@
     "rootDir": "src/",
     "outDir": "dist/",
     "lib": ["es6", "dom", "es2019"],
+    "baseUrl": ".",
+    "paths": {
+      "@nxg-org/mineflayer-physics-util": ["src/index.ts"]
+    },
   },
   "include": ["src/**/*"]
 }
