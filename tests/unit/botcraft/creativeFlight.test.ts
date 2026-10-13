@@ -47,6 +47,29 @@ describe("Botcraft creative flight", () => {
     });
   }
 
+  // f_fly_toggle_on: jump from the ground (tick 1), press jump again within 7 ticks (tick 5) and flying starts, the
+  // tick's motion then 0.6 of the falling jump's plus the float flying impulse
+  for (const version of ["1.12.2", "1.21.11"]) {
+    it(`toggles flying on a second press of jump (${version}, f_fly_toggle_on)`, () => {
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(0.5, 101, 2619.5), groundLevel: 101 });
+      const state = rig.playerState;
+      const world = createFlatWorld(version, 101) as any;
+      state.gameMode = "creative";
+      state.mayFly = true;
+      state.flySpeed = 0.05000000074505806;
+      state.yawDegrees = 270;
+
+      for (let tick = 1; tick <= 5; tick++) {
+        state.control.jump = tick === 1 || tick === 5;
+        rig.physics.simulate(rig.playerCtx, world);
+        expect(state.flying).toBe(tick === 5);
+      }
+
+      expect(state.vel.y).toBe(0.13984669426015903);
+      expect(state.pos.y).toBe(102.39918708470515);
+    });
+  }
+
   for (const { version, posX, velX } of recorded) {
     it(`flies forward at the flying speed (${version}, f_fly_forward)`, () => {
       const rig = flyingRig(version);

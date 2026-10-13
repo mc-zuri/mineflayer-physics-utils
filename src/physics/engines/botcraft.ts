@@ -591,7 +591,7 @@ export class BotcraftPhysics implements IPhysics {
 
     this.inputsToCrouch(ctx, heading, world);
     this.inputsToSprint(ctx, heading, world);
-    this.inputsToFly(ctx, heading, world);
+    this.inputsToFly(ctx);
 
     // If sneaking in water, add downward speed (LocalPlayer.goDownInWater, 1.13+)
     if (player.isInWater && player.control.sneak && !player.flying && !this.verLessThan("1.13")) {
@@ -1073,7 +1073,7 @@ export class BotcraftPhysics implements IPhysics {
     player.sprinting = value;
   }
 
-  private inputsToFly(ctx: EPhysicsCtx, heading: Heading, world: World) {
+  private inputsToFly(ctx: EPhysicsCtx) {
     const player = ctx.state as PlayerState;
     let flyChanged = false;
     if (player.mayFly) {
@@ -1083,11 +1083,11 @@ export class BotcraftPhysics implements IPhysics {
         flyChanged = true;
         // onUpdateAbilities();
       } else {
-        // If double jump in creative, swap flying mode
-        if (player.prevControl.jump && player.control.jump) {
+        // LocalPlayer.aiStep: a second press of jump within the trigger time toggles flying, unless swimming (1.13+)
+        if (!player.prevControl.jump && player.control.jump) {
           if (player.flyJumpTriggerTime === 0) {
             player.flyJumpTriggerTime = ctx.worldSettings.flyJumpTriggerCooldown;
-          } else if (this.isSwimmingAndNotFlying(ctx, world)) {
+          } else if (this.verLessThan("1.13") || !player.swimming) {
             player.flying = !player.flying;
             flyChanged = true;
             // onUpdateAbilities();
