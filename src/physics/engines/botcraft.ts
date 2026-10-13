@@ -54,6 +54,7 @@ export class BotcraftPhysics implements IPhysics {
   public movementEfficiencyAttribute: string;
   public waterMovementEfficiencyAttribute: string;
   public stepHeightAttribute: string;
+  public gravityAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
   public readonly mth: Mth;
@@ -87,6 +88,7 @@ export class BotcraftPhysics implements IPhysics {
     this.jumpStrengthAttribute = extractAttribute(this, "jumpStrength");
     this.waterMovementEfficiencyAttribute = extractAttribute(this, "waterMovementEfficiency");
     this.stepHeightAttribute = extractAttribute(this, "stepHeight");
+    this.gravityAttribute = extractAttribute(this, "gravity");
 
     this.blockSlipperiness = {};
     this.slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id;
@@ -1031,7 +1033,10 @@ export class BotcraftPhysics implements IPhysics {
       if (this.verLessThan("1.20.5")) {
         gravity = goingDown && hasSlowFalling ? 0.01 : ctx.gravity;
       } else {
-        gravity = goingDown && hasSlowFalling ? Math.min(0.01, ctx.gravity) : ctx.gravity;
+        // the gravity attribute, with its modifiers (LivingEntity.getDefaultGravity)
+        const synced = player.attributes[this.gravityAttribute];
+        const defaultGravity = synced ? attributes.getAttributeValue(synced) : ctx.gravity;
+        gravity = goingDown && hasSlowFalling ? Math.min(0.01, defaultGravity) : defaultGravity;
       }
 
       if (player.isInWater && !player.flying) {
