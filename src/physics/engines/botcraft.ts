@@ -956,7 +956,12 @@ export class BotcraftPhysics implements IPhysics {
     // Stop sprinting if necessary
     // (releasing the sprint key does not stop a sprint)
     if (player.sprinting) {
-      if (this.isSwimming(ctx)) {
+      if (this.verLessThan("1.13")) {
+        // EntityPlayerSP.onLivingUpdate: forward below 0.8, a horizontal collision or hunger stops it
+        if (heading.forward < 0.8 || player.isCollidedHorizontally || !this.hasEnoughFoodToSprint(ctx)) {
+          this.setSprinting(ctx, false);
+        }
+      } else if (this.isSwimming(ctx)) {
         if (this.shouldStopSwimSprinting(ctx, heading)) {
           this.setSprinting(ctx, false);
         }
@@ -976,14 +981,16 @@ export class BotcraftPhysics implements IPhysics {
       !player.isUsingItem &&
       !player.blindness &&
       //  (!player.isPassenger || this.vehicleCanSprint(ctx)) &&
-      (!player.fallFlying || player.isUnderWater) &&
       (!movingSlowly || player.isUnderWater) &&
-      (!player.isInWater || player.isUnderWater);
+      // (before 1.13 neither gliding nor water keeps a sprint from starting)
+      (this.verLessThan("1.13") || ((!player.fallFlying || player.isUnderWater) && (!player.isInWater || player.isUnderWater)));
   }
 
-  // 1.21.5+ any forward impulse (ClientInput.hasForwardImpulse, of the normalized move vector); before, 0.8 out of water
+  // 1.21.5+ any forward impulse (ClientInput.hasForwardImpulse, of the normalized move vector); 1.14+ 0.8 out of
+  // water; before, 0.8 everywhere
   private hasEnoughImpulseToStartSprinting(player: PlayerState, heading: Heading): boolean {
     if (this.verGreaterThan("1.21.4")) return heading.forward > 1e-5;
+    if (this.verLessThan("1.14")) return heading.forward >= 0.8;
     return heading.forward >= (player.isInWater ? 1e-5 : 0.8);
   }
 
@@ -1124,10 +1131,15 @@ export class BotcraftPhysics implements IPhysics {
     // (blindness stops a sprint from 1.21.4; before, it only keeps one from starting)
     return (this.verGreaterThan("1.21.3") && player.blindness > 0) ||
       //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
-      heading.forward < 1e-5 ||
+      !this.hasForwardImpulseToKeepSprinting(heading) ||
       !this.hasEnoughFoodToSprint(ctx) ||
       (player.isCollidedHorizontally && !player.isCollidedHorizontallyMinor) ||
       (player.isInWater && !player.isUnderWater);
+  }
+
+  // 1.14+ any forward impulse keeps a sprint (ClientInput.hasForwardImpulse); 1.13 needs 0.8 as to start one
+  private hasForwardImpulseToKeepSprinting(heading: Heading): boolean {
+    return this.verLessThan("1.14") ? heading.forward >= 0.8 : heading.forward > 1e-5;
   }
 
   private shouldStopSwimSprinting(ctx: EPhysicsCtx, heading: Heading): boolean {
@@ -1135,7 +1147,7 @@ export class BotcraftPhysics implements IPhysics {
     return player.blindness > 0 ||
       //  (player.isPassenger && !this.vehicleCanSprint(ctx)) ||
       !player.isInWater ||
-      (heading.forward <= 1e-5 && !player.onGround && !player.control.sneak) ||
+      (!this.hasForwardImpulseToKeepSprinting(heading) && !player.onGround && !player.control.sneak) ||
       !this.hasEnoughFoodToSprint(ctx);
   }
 
