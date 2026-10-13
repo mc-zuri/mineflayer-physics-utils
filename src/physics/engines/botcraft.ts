@@ -55,6 +55,7 @@ export class BotcraftPhysics implements IPhysics {
   public waterMovementEfficiencyAttribute: string;
   public stepHeightAttribute: string;
   public gravityAttribute: string;
+  public sneakingSpeedAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
   public readonly mth: Mth;
@@ -90,6 +91,8 @@ export class BotcraftPhysics implements IPhysics {
     this.waterMovementEfficiencyAttribute = extractAttribute(this, "waterMovementEfficiency");
     this.stepHeightAttribute = extractAttribute(this, "stepHeight");
     this.gravityAttribute = extractAttribute(this, "gravity");
+    // 1.21 - 1.21.1 player.sneaking_speed, then sneaking_speed
+    this.sneakingSpeedAttribute = extractAttribute(this, "playerSneakingSpeed") ?? extractAttribute(this, "sneakingSpeed");
 
     this.blockSlipperiness = {};
     this.slimeBlockId = blocksByName.slime_block ? blocksByName.slime_block.id : blocksByName.slime.id;
@@ -721,7 +724,8 @@ export class BotcraftPhysics implements IPhysics {
     const f32 = Math.fround;
     if (this.verLessThan("1.19")) return 0.3;
     if (this.verLessThan("1.21")) return Math.min(Math.max(f32(f32(0.3) + f32(player.swiftSneak * f32(0.15))), 0), 1);
-    return f32(player.attributes?.sneakingSpeed?.value ?? 0.3); // TODO: this shouldn't be happening!
+    const synced = player.attributes?.[this.sneakingSpeedAttribute];
+    return f32(synced ? attributes.getAttributeValue(synced) : 0.3);
   }
 
   private isSwimmingAndNotFlying(ctx: EPhysicsCtx, world: World): boolean {
