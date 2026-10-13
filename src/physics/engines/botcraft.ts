@@ -90,6 +90,9 @@ export class BotcraftPhysics implements IPhysics {
   protected bubblecolumnId: number;
   protected airId: number;
   protected waterLike: Set<number>;
+  /** The position the tick started at (vanilla's oldPosition) and the move Entity.move recorded this tick. */
+  private tickStartPos: Vec3 | null = null;
+  private recordedMove: { from: Vec3; to: Vec3; movement: Vec3 } | null = null;
 
   public readonly statusEffectNames: { [type in CheapEffects]: string };
   public readonly enchantmentNames: { [type in CheapEnchantments]: string };
@@ -350,6 +353,8 @@ export class BotcraftPhysics implements IPhysics {
       this.applyFireworkBoost(entity, entity.fireworkRocketsBeforePlayer);
     }
 
+    this.tickStartPos = ctx.state.pos.clone();
+    this.recordedMove = null;
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
     if (!this.verLessThan("1.13") && ctx.state instanceof PlayerState) this.updateFluidOnEyes(ctx.state, world);
@@ -1945,7 +1950,9 @@ export class BotcraftPhysics implements IPhysics {
       const moved = movement.norm() ** 2 > 1e-7;
       this.keepBoundingBox(player, { ...sizedBox, bb: moved ? boundingBox.move(movement) : boundingBox }, moved);
     } else if (movement.norm() ** 2 > 1e-7) {
+      const from = player.pos.clone();
       player.pos.add(movement);
+      this.recordedMove = { from, to: player.pos.clone(), movement: movementBeforeCollisions.clone() };
     }
 
     // 1.20.5: movement is now considered var4.
@@ -2155,6 +2162,13 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   checkInsideBlocks(player: PlayerState, world: World, worldSettings = new PhysicsWorldSettings(this.data)) {
+    if (!this.verLessThan("1.21.9")) {
+      for (const { pos, intersects } of this.blocksInsideAlongMove(player)) {
+        const block = world.getBlock(pos);
+        if (block != null && block.type !== this.airId) this.entityInside(player, world, pos, block, worldSettings, intersects);
+      }
+      return;
+    }
     const aabb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
     const [minAABB, maxAABB] = aabb.minAndMaxArrays();
     const blockPos = new Vec3(0, 0, 0);
@@ -2163,62 +2177,259 @@ export class BotcraftPhysics implements IPhysics {
         for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
           const block = world.getBlock(blockPos);
           if (block == null) continue;
-          if (this.webId === block.type) {
-            // WebBlock::entityInside
-            player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
-            player.fallDistance = 0; // makeStuckInBlock
-          } else if (this.bubblecolumnId === block.type) {
-            const down = !block.metadata;
-            const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
-            const bubbleDrag =
-              aboveBlock?.type === this.airId
-                ? worldSettings.bubbleColumnSurfaceDrag
-                : worldSettings.bubbleColumnDrag;
-            if (down) {
-              player.vel.y = Math.max(bubbleDrag.maxDown, player.vel.y - bubbleDrag.down);
-            } else {
-              player.vel.y = Math.min(bubbleDrag.maxUp, player.vel.y + bubbleDrag.up);
-            }
-          } else if (this.honeyblockId === block.type) {
-            // From 1.21.2 the block runs after travel's gravity and drag: HoneyBlock undoes them to read the motion
-            // (getOldDeltaY) and applies them to what it sets (getNewDeltaY)
-            const afterTravel = !this.verLessThan("1.21.2");
-            const oldDeltaY = (vy: number) => (afterTravel ? vy / 0.9800000190734863 + 0.08 : vy);
-            const newDeltaY = (vy: number) => (afterTravel ? (vy - 0.08) * 0.9800000190734863 : vy);
-            // Check if sliding down on the side of the block
-            if (
-              !player.onGround &&
-              player.pos.y <= blockPos.y + 0.9375 - 1e-7 &&
-              oldDeltaY(player.vel.y) < -0.08 &&
-              (Math.abs(blockPos.x + 0.5 - player.pos.x) + 1e-7 > 0.4375 + player.halfWidth ||
-                Math.abs(blockPos.z + 0.5 - player.pos.z) + 1e-7 > 0.4375 + player.halfWidth)
-            ) {
-              if (oldDeltaY(player.vel.y) < -0.13) {
-                const factor = -0.05 / oldDeltaY(player.vel.y); // magic number.
-                player.vel.x *= factor;
-                player.vel.z *= factor;
-                player.vel.y = newDeltaY(-0.05); // magic number.
-              } else {
-                player.vel.y = newDeltaY(-0.05); // magic number.
-              }
-            }
-          } else if (this.soulsandId === block.type && this.verLessThan("1.15")) {
-            // SoulSandBlock::entityInside before the block speed factor: each soul sand block touched slows by 0.4D
-            player.vel.x *= 0.4;
-            player.vel.z *= 0.4;
-          } else if (this.berryBushId === block.type) {
-            // BerryBushBlock::entityInside
-            player.stuckSpeedMultiplier = new Vec3(0.800000011920929, 0.75, 0.800000011920929); // magic number
-            player.fallDistance = 0; // makeStuckInBlock
-          } else if (this.powderSnowId === block.type) {
-            // PowderSnowBlock::entityInside
-            const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-            if (feetBlock && this.powderSnowId === feetBlock.type) {
-              player.stuckSpeedMultiplier = new Vec3(0.8999999761581421, 1.5, 0.8999999761581421);
-              player.fallDistance = 0; // makeStuckInBlock
-            }
-          }
+          this.entityInside(player, world, blockPos, block, worldSettings, true);
         }
+      }
+    }
+  }
+
+  /**
+   * The blocks Entity.checkInsideBlocks visits from 1.21.9, each once, in order: the tick's move (else the tick start
+   * to the position) split per axis (Direction.axisStepOrder of the requested move), and for each step
+   * BlockGetter.forEachBlockIntersectedBetween with the box at its end. `intersects` is the flag 1.21.10+ pass to
+   * entityInside: a step of about a block or more, or a block the box at the end overlaps.
+   */
+  private blocksInsideAlongMove(player: PlayerState): { pos: Vec3; intersects: boolean }[] {
+    const visits: { pos: Vec3; intersects: boolean }[] = [];
+    const visited = new Set<string>();
+    const move = this.recordedMove ?? { from: this.tickStartPos ?? player.pos, to: player.pos, movement: null };
+    const steps: [Vec3, Vec3][] = [];
+    const delta = move.to.minus(move.from);
+    if (move.movement != null && delta.norm() ** 2 > 0) {
+      const order: ("x" | "y" | "z")[] = Math.abs(move.movement.x) < Math.abs(move.movement.z) ? ["y", "z", "x"] : ["y", "x", "z"];
+      let from = move.from;
+      for (const axis of order) {
+        if (delta[axis] === 0) continue;
+        const to = from.clone();
+        to[axis] += delta[axis];
+        steps.push([from, to]);
+        from = to;
+      }
+    } else {
+      steps.push([move.from, move.to]);
+    }
+    for (const [from, to] of steps) {
+      const box = getCollider(player.pose, to).expand(-9.999999747378752e-6, -9.999999747378752e-6, -9.999999747378752e-6);
+      const long = from.distanceSquared(to) > 0.9999900000002526 * 0.9999900000002526;
+      this.forEachBlockIntersectedBetween(from, to, box, (pos) => {
+        const key = `${pos.x},${pos.y},${pos.z}`;
+        if (visited.has(key)) return;
+        visited.add(key);
+        const overlaps =
+          box.minX < pos.x + 1 && box.maxX > pos.x && box.minY < pos.y + 1 && box.maxY > pos.y && box.minZ < pos.z + 1 && box.maxZ > pos.z;
+        visits.push({ pos, intersects: long || overlaps });
+      });
+    }
+    return visits;
+  }
+
+  /**
+   * BlockGetter.forEachBlockIntersectedBetween (1.21.9+): without a move the box's blocks; else the blocks of the box
+   * at the start, those swept along the travel, then those of the box at the end, each along the move.
+   */
+  private forEachBlockIntersectedBetween(from: Vec3, to: Vec3, box: AABB, visit: (pos: Vec3) => void) {
+    const d = to.minus(from);
+    const f32 = Math.fround;
+    const corners = (bb: AABB) => [
+      Math.floor(bb.minX),
+      Math.floor(bb.minY),
+      Math.floor(bb.minZ),
+      Math.floor(bb.maxX),
+      Math.floor(bb.maxY),
+      Math.floor(bb.maxZ),
+    ];
+    if (d.norm() ** 2 < f32(f32(1e-5) * f32(1e-5))) {
+      const [x0, y0, z0, x1, y1, z1] = corners(box);
+      for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) visit(new Vec3(x, y, z));
+      return;
+    }
+    const seen = new Set<string>();
+    const key = (p: Vec3) => `${p.x},${p.y},${p.z}`;
+    const start = box.clone().translate(-d.x, -d.y, -d.z);
+    for (const pos of this.betweenCornersInDirection(corners(start), d)) {
+      visit(pos);
+      seen.add(key(pos));
+    }
+    this.addCollisionsAlongTravel(seen, d, box, visit);
+    for (const pos of this.betweenCornersInDirection(corners(box), d)) {
+      if (!seen.has(key(pos))) {
+        seen.add(key(pos));
+        visit(pos);
+      }
+    }
+  }
+
+  /** BlockPos.betweenCornersInDirection: Y planes first, then by Direction.axisStepOrder, each along the direction. */
+  private betweenCornersInDirection([x0, y0, z0, x1, y1, z1]: number[], d: Vec3): Vec3[] {
+    const order: ("x" | "y" | "z")[] = Math.abs(d.x) < Math.abs(d.z) ? ["y", "z", "x"] : ["y", "x", "z"];
+    const min = { x: Math.min(x0, x1), y: Math.min(y0, y1), z: Math.min(z0, z1) };
+    const max = { x: Math.max(x0, x1), y: Math.max(y0, y1), z: Math.max(z0, z1) };
+    const startOf = (a: "x" | "y" | "z") => (d[a] >= 0 ? min[a] : max[a]);
+    const stepOf = (a: "x" | "y" | "z") => (d[a] >= 0 ? 1 : -1);
+    const out: Vec3[] = [];
+    const [a, b, c] = order;
+    for (let i = 0; i <= max[a] - min[a]; i++) {
+      for (let j = 0; j <= max[b] - min[b]; j++) {
+        for (let k = 0; k <= max[c] - min[c]; k++) {
+          const p = { x: 0, y: 0, z: 0 };
+          p[a] = startOf(a) + stepOf(a) * i;
+          p[b] = startOf(b) + stepOf(b) * j;
+          p[c] = startOf(c) + stepOf(c) * k;
+          out.push(new Vec3(p.x, p.y, p.z));
+        }
+      }
+    }
+    return out;
+  }
+
+  /** BlockGetter.addCollisionsAlongTravel (1.21.9+): the blocks the box sweeps, cell by cell along the move. */
+  private addCollisionsAlongTravel(seen: Set<string>, d: Vec3, box: AABB, visit: (pos: Vec3) => void) {
+    const sx = box.maxX - box.minX;
+    const sy = box.maxY - box.minY;
+    const sz = box.maxZ - box.minZ;
+    // getFurthestCorner
+    const ax = Math.abs(d.x);
+    const ay = Math.abs(d.y);
+    const az = Math.abs(d.z);
+    const gx = d.x >= 0 ? 1 : -1;
+    const gy = d.y >= 0 ? 1 : -1;
+    const gz = d.z >= 0 ? 1 : -1;
+    const corner = ax <= ay && ax <= az ? [-gx, -gz, gy] : ay <= az ? [gz, -gy, -gx] : [-gy, gx, -gz];
+    const center = new Vec3((box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2, (box.minZ + box.maxZ) / 2);
+    const end = new Vec3(center.x + sx * 0.5 * corner[0], center.y + sy * 0.5 * corner[1], center.z + sz * 0.5 * corner[2]);
+    const begin = end.minus(d);
+    let x = Math.floor(begin.x);
+    let y = Math.floor(begin.y);
+    let z = Math.floor(begin.z);
+    const stepX = Math.sign(d.x);
+    const stepY = Math.sign(d.y);
+    const stepZ = Math.sign(d.z);
+    const frac = (v: number) => v - Math.floor(v);
+    const dx = stepX === 0 ? Number.MAX_VALUE : stepX / d.x;
+    const dy = stepY === 0 ? Number.MAX_VALUE : stepY / d.y;
+    const dz = stepZ === 0 ? Number.MAX_VALUE : stepZ / d.z;
+    let tx = dx * (stepX > 0 ? 1 - frac(begin.x) : frac(begin.x));
+    let ty = dy * (stepY > 0 ? 1 - frac(begin.y) : frac(begin.y));
+    let tz = dz * (stepZ > 0 ? 1 - frac(begin.z) : frac(begin.z));
+    const clamp = (v: number, lo: number) => Math.min(Math.max(v, lo + 9.999999747378752e-6), lo + 1 - 9.999999747378752e-6);
+    while (tx <= 1 || ty <= 1 || tz <= 1) {
+      if (tx < ty) {
+        if (tx < tz) {
+          x += stepX;
+          tx += dx;
+        } else {
+          z += stepZ;
+          tz += dz;
+        }
+      } else if (ty < tz) {
+        y += stepY;
+        ty += dy;
+      } else {
+        z += stepZ;
+        tz += dz;
+      }
+      const hit = this.clipSegment([x, y, z, x + 1, y + 1, z + 1], begin, end);
+      if (hit == null) continue;
+      const ox = Math.floor(clamp(hit.x, x) - sx * corner[0]);
+      const oy = Math.floor(clamp(hit.y, y) - sy * corner[1]);
+      const oz = Math.floor(clamp(hit.z, z) - sz * corner[2]);
+      for (const pos of this.betweenCornersInDirection([x, y, z, ox, oy, oz], d)) {
+        const k = `${pos.x},${pos.y},${pos.z}`;
+        if (!seen.has(k)) {
+          seen.add(k);
+          visit(pos);
+        }
+      }
+    }
+  }
+
+  /** AABB.clip: where the segment enters the box through a face it moves toward, if it does. */
+  private clipSegment([x0, y0, z0, x1, y1, z1]: number[], from: Vec3, to: Vec3): Vec3 | null {
+    const d = to.minus(from);
+    let t = 1.0;
+    let hit = false;
+    // AABB.clipPoint: the plane of a face, the other two axes within the face (1e-7 slack)
+    const face = (plane: number, along: number, o: number, u: number, du: number, v: number, dv: number, uRange: number[], vRange: number[]) => {
+      const s = (plane - o) / along;
+      const pu = u + s * du;
+      const pv = v + s * dv;
+      if (0.0 < s && s < t && uRange[0] - 1e-7 < pu && pu < uRange[1] + 1e-7 && vRange[0] - 1e-7 < pv && pv < vRange[1] + 1e-7) {
+        t = s;
+        hit = true;
+      }
+    };
+    if (d.x > 1e-7) face(x0, d.x, from.x, from.y, d.y, from.z, d.z, [y0, y1], [z0, z1]);
+    else if (d.x < -1e-7) face(x1, d.x, from.x, from.y, d.y, from.z, d.z, [y0, y1], [z0, z1]);
+    if (d.y > 1e-7) face(y0, d.y, from.y, from.z, d.z, from.x, d.x, [z0, z1], [x0, x1]);
+    else if (d.y < -1e-7) face(y1, d.y, from.y, from.z, d.z, from.x, d.x, [z0, z1], [x0, x1]);
+    if (d.z > 1e-7) face(z0, d.z, from.z, from.x, d.x, from.y, d.y, [x0, x1], [y0, y1]);
+    else if (d.z < -1e-7) face(z1, d.z, from.z, from.x, d.x, from.y, d.y, [x0, x1], [y0, y1]);
+    return hit ? from.plus(d.scaled(t)) : null;
+  }
+
+  /** Block.entityInside of the blocks the engine models; `intersects` is the flag 1.21.10+ pass. */
+  private entityInside(
+    player: PlayerState,
+    world: World,
+    blockPos: Vec3,
+    block: Block,
+    worldSettings: PhysicsWorldSettings,
+    intersects: boolean
+  ) {
+    if (this.webId === block.type) {
+      // WebBlock::entityInside
+      player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
+      player.fallDistance = 0; // makeStuckInBlock
+    } else if (this.bubblecolumnId === block.type) {
+      if (!intersects && !this.verLessThan("1.21.10")) return;
+      const down = !block.metadata;
+      const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
+      const bubbleDrag =
+        aboveBlock?.type === this.airId
+          ? worldSettings.bubbleColumnSurfaceDrag
+          : worldSettings.bubbleColumnDrag;
+      if (down) {
+        player.vel.y = Math.max(bubbleDrag.maxDown, player.vel.y - bubbleDrag.down);
+      } else {
+        player.vel.y = Math.min(bubbleDrag.maxUp, player.vel.y + bubbleDrag.up);
+      }
+    } else if (this.honeyblockId === block.type) {
+      // From 1.21.2 the block runs after travel's gravity and drag: HoneyBlock undoes them to read the motion
+      // (getOldDeltaY) and applies them to what it sets (getNewDeltaY)
+      const afterTravel = !this.verLessThan("1.21.2");
+      const oldDeltaY = (vy: number) => (afterTravel ? vy / 0.9800000190734863 + 0.08 : vy);
+      const newDeltaY = (vy: number) => (afterTravel ? (vy - 0.08) * 0.9800000190734863 : vy);
+      // Check if sliding down on the side of the block
+      if (
+        !player.onGround &&
+        player.pos.y <= blockPos.y + 0.9375 - 1e-7 &&
+        oldDeltaY(player.vel.y) < -0.08 &&
+        (Math.abs(blockPos.x + 0.5 - player.pos.x) + 1e-7 > 0.4375 + player.halfWidth ||
+          Math.abs(blockPos.z + 0.5 - player.pos.z) + 1e-7 > 0.4375 + player.halfWidth)
+      ) {
+        if (oldDeltaY(player.vel.y) < -0.13) {
+          const factor = -0.05 / oldDeltaY(player.vel.y); // magic number.
+          player.vel.x *= factor;
+          player.vel.z *= factor;
+          player.vel.y = newDeltaY(-0.05); // magic number.
+        } else {
+          player.vel.y = newDeltaY(-0.05); // magic number.
+        }
+      }
+    } else if (this.soulsandId === block.type && this.verLessThan("1.15")) {
+      // SoulSandBlock::entityInside before the block speed factor: each soul sand block touched slows by 0.4D
+      player.vel.x *= 0.4;
+      player.vel.z *= 0.4;
+    } else if (this.berryBushId === block.type) {
+      // BerryBushBlock::entityInside
+      player.stuckSpeedMultiplier = new Vec3(0.800000011920929, 0.75, 0.800000011920929); // magic number
+      player.fallDistance = 0; // makeStuckInBlock
+    } else if (this.powderSnowId === block.type) {
+      // PowderSnowBlock::entityInside
+      const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
+      if (feetBlock && this.powderSnowId === feetBlock.type) {
+        player.stuckSpeedMultiplier = new Vec3(0.8999999761581421, 1.5, 0.8999999761581421);
+        player.fallDistance = 0; // makeStuckInBlock
       }
     }
   }
