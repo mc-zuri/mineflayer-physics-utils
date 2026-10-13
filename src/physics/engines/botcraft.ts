@@ -1863,10 +1863,14 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-    // TODO: if trapdoor AND below block is a ladder with the same facing property
-    // as the trapdoor then the trapdoor is a climbable block too
-
-    return feetBlock != null && this.climbableIds.has(feetBlock.type);
+    if (feetBlock == null) return false;
+    if (this.climbableIds.has(feetBlock.type)) return true;
+    // LivingEntity.trapdoorUsableAsLadder (1.9+): an open trapdoor above a ladder facing the same way
+    if (this.verLessThan("1.9") || !feetBlock.name.endsWith("trapdoor")) return false;
+    const trapdoor = feetBlock.getProperties();
+    if (trapdoor.open !== true && trapdoor.open !== "true") return false;
+    const below = world.getBlock(player.pos.offset(0, -1, 0));
+    return below != null && below.type === this.ladderId && below.getProperties().facing === trapdoor.facing;
   }
 
   getSupportingBlockPos(world: World, feetSliceAABB: AABB): Vec3 | null {

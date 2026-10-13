@@ -98,4 +98,17 @@ describe("Botcraft climbing", () => {
       });
     }
   }
+
+  // LivingEntity.trapdoorUsableAsLadder (1.9+): an open trapdoor above a ladder facing the same way climbs as one.
+  for (const version of ["1.20.4", "1.21.11"]) {
+    it(`climbs an open trapdoor above a ladder (${version}, b_climb_jump_up_ladder_trapdoor tick 32)`, () => {
+      const trapdoor: [string, Record<string, string>] = ["oak_trapdoor", { open: "true", facing: "west", half: "bottom", powered: "false", waterlogged: "false" }];
+      const { state, tick } = climbRig(version, 1781.5, [...ladder(4), trapdoor], new Vec3(5.5, 104.94800005555172, 1781.5));
+      state.vel.set(0, 0.11760000228881837, 0);
+      state.control.jump = true;
+      tick();
+      expect(state.pos.y).toBe(105.06560005784054);
+      expect(state.vel.y).toBe(0.11760000228881837);
+    });
+  }
 });
