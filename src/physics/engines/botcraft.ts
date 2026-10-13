@@ -1047,22 +1047,27 @@ export class BotcraftPhysics implements IPhysics {
         const sprintSwims = player.sprinting && !this.verLessThan("1.13");
         let waterSlowDown = Math.fround(sprintSwims ? ctx.sprintWaterInertia : ctx.waterInertia);
         let inputStrength = Math.fround(0.02);
+        // Vanilla's float depth strider: the level (at most 3) before 1.21, then the water movement efficiency
         let depthStriderMult;
         if (this.verLessThan("1.21")) {
-          const depthStrider = player.depthStrider;
-          depthStriderMult = Math.min(depthStrider, 3) / 3;
+          depthStriderMult = Math.fround(Math.min(player.depthStrider, 3));
         } else {
           depthStriderMult = player.attributes[this.waterMovementEfficiencyAttribute]?.value ?? 0; // random value as default
         }
 
         if (!player.onGround) {
-          depthStriderMult *= 0.5;
+          depthStriderMult = Math.fround(depthStriderMult * 0.5);
         }
 
         if (depthStriderMult > 0.0) {
-          waterSlowDown += (0.54600006 - waterSlowDown) * depthStriderMult; // magic number
+          // float arithmetic; before 1.21 the level is divided by 3 after the multiplication
+          const toward = (diff: number) => {
+            const scaled = Math.fround(diff * depthStriderMult);
+            return this.verLessThan("1.21") ? Math.fround(scaled / 3) : scaled;
+          };
+          waterSlowDown = Math.fround(waterSlowDown + toward(Math.fround(Math.fround(0.54600006) - waterSlowDown)));
           const movementSpeed = this.getMovementSpeedAttribute(ctx); // slight deviation, using utility method
-          inputStrength += Math.fround(movementSpeed - inputStrength) * depthStriderMult;
+          inputStrength = Math.fround(inputStrength + toward(Math.fround(movementSpeed - inputStrength)));
         }
 
         if (this.verGreaterThan("1.12.2")) {
