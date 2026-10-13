@@ -798,9 +798,13 @@ export class BotcraftPhysics implements IPhysics {
    */
   setSprinting(ctx: EPhysicsCtx, value: boolean) {
     const player = ctx.state as PlayerState;
-    let attr = player.attributes[this.movementSpeedAttribute];
-    if (attr != null) attributes.deleteAttributeModifier(attr, ctx.worldSettings.sprintingUUID);
-    attr = attributes.createAttributeValue(ctx.worldSettings.playerSpeed);
+    // LivingEntity.setSprinting: the sprint modifier comes and goes on the movement speed the server synced (a copy,
+    // the bot's own stays as the server sent it); without one, the player's default base of 0.1F
+    const synced = player.attributes[this.movementSpeedAttribute];
+    const attr = synced
+      ? { value: synced.value, modifiers: synced.modifiers.slice() }
+      : attributes.createAttributeValue(Math.fround(ctx.worldSettings.playerSpeed));
+    attributes.deleteAttributeModifier(attr, ctx.worldSettings.sprintingUUID);
     if (value) {
       attributes.addAttributeModifier(attr, {
         uuid: ctx.worldSettings.sprintingUUID,
