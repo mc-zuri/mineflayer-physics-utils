@@ -1861,11 +1861,6 @@ export class BotcraftPhysics implements IPhysics {
       inputStrength *= Math.fround(0.2);
     }
 
-    // Use flySpeed for horizontal movement when flying
-    if (player.flying) {
-      inputStrength *= player.flySpeed * 40;
-    }
-
     const yaw = floatRadians(this.yawDegrees(player));
 
     if (this.verLessThan("1.14")) {
