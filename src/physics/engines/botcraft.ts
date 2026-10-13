@@ -1415,28 +1415,37 @@ export class BotcraftPhysics implements IPhysics {
       this.checkInsideBlocks(player, world, ctx.worldSettings);
     }
 
-    let blockSpeedFactor = 1.0;
-    if (this.verGreaterThan("1.15.2") && this.verLessThan("1.21")) {
-      const soulSpeed = player.soulSpeed;
-      const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
-      if (feetBlock && (this.honeyblockId === feetBlock.type || (this.soulsandId === feetBlock.type && soulSpeed === 0))) {
-        blockSpeedFactor = 0.4;
-      }
-      if (blockSpeedFactor === 1.0) {
-        const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
-        if (blockBelow && (this.honeyblockId === blockBelow.type || (this.soulsandId === blockBelow.type && soulSpeed === 0))) {
-          blockSpeedFactor = 0.4;
-        }
-      }
+    // Entity.move ends by scaling the horizontal motion by the block speed factor (1.15+)
+    if (!this.verLessThan("1.15")) {
+      const blockSpeedFactor = this.getBlockSpeedFactor(player, world);
+      player.vel.x *= blockSpeedFactor;
+      player.vel.z *= blockSpeedFactor;
     }
+  }
 
-    if (this.verGreaterThan("1.20.6")) {
-      const factor = player.attributes[this.movementEfficiencyAttribute]?.value ?? 1
-      blockSpeedFactor = blockSpeedFactor + factor * (1 - blockSpeedFactor);
+  /**
+   * Entity.getBlockSpeedFactor: the speed factor (0.4F for soul sand and honey) of the block the player is in, or
+   * when that is 1, of the block below that affects its movement (not when it is in water or a bubble column).
+   * LivingEntity's: 1.16 - 1.20 ignore it on a soul speed block with Soul Speed; since 1.21 it is lerped toward 1 by
+   * the movement efficiency attribute, in float.
+   */
+  private getBlockSpeedFactor(player: PlayerState, world: World): number {
+    const f32 = Math.fround;
+    const speedFactor = (block: Block | null) =>
+      block != null && (block.type === this.soulsandId || block.type === this.honeyblockId) ? f32(0.4) : 1;
+    const feet = world.getBlock(player.pos);
+    let factor = speedFactor(feet);
+    const below = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+    if (factor === 1 && !(feet != null && (feet.type === this.waterId || feet.type === this.bubblecolumnId))) {
+      factor = speedFactor(below);
     }
-
-    player.vel.x *= blockSpeedFactor;
-    player.vel.z *= blockSpeedFactor;
+    if (this.verLessThan("1.21")) {
+      const onSoulSpeedBlock = below != null && (below.type === this.soulsandId || below.name === "soul_soil");
+      return onSoulSpeedBlock && player.soulSpeed > 0 ? 1 : factor;
+    }
+    const synced = player.attributes[this.movementEfficiencyAttribute];
+    const efficiency = synced ? f32(attributes.getAttributeValue(synced)) : 0;
+    return f32(factor + f32(efficiency * f32(1 - factor)));
   }
 
   // localPlayer.java
