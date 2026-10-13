@@ -580,7 +580,9 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   getLiquidHeightPcent(block: Block) {
-    return 1 - (this.getRenderedDepth(block) + 1) / 9;
+    // lava drops by its level like water (FlowingFluid.getOwnHeight: amount / 9, falling lava full)
+    const depth = block.type === this.lavaId ? (block.metadata >= 8 ? 0 : block.metadata) : this.getRenderedDepth(block);
+    return 1 - (depth + 1) / 9;
   }
 
   getRenderedDepth(block: Block) {
