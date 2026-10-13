@@ -1598,7 +1598,9 @@ export class BotcraftPhysics implements IPhysics {
       const onGround = player.onGround || (collisionY && movement.y < 0);
 
 
-      if (maxUpStep > 0 && onGround && (collisionX || collisionZ)) {
+      if (maxUpStep > 0 && onGround && (collisionX || collisionZ) && !this.verLessThan("1.21")) {
+        newMovement = this.stepUp(world, playerAABB, movement, newMovement, collisionY && movement.y < 0, maxUpStep);
+      } else if (maxUpStep > 0 && onGround && (collisionX || collisionZ)) {
         let stepUpMovement = this.collideBoundingBox(
           world,
           playerAABB,
@@ -2009,6 +2011,64 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
     return distance;
+  }
+
+  /**
+   * Entity.collide's step up from 1.21: from the box (moved by the landing first), try the heights of the collider
+   * faces within the step height (float, lowest first, skipping the landing's own), keeping the first that goes
+   * further horizontally than the plain collision. A block's faces are its voxel shape's y coordinates: the grid
+   * lines of a box aligned to eighths, else the box's bottom and top.
+   */
+  private stepUp(world: World, bb: AABB, movement: Vec3, collided: Vec3, landing: boolean, maxUpStep: number): Vec3 {
+    const f32 = Math.fround;
+    const stepHeight = f32(maxUpStep);
+    const start = landing ? bb.move(new Vec3(0, collided.y, 0)) : bb;
+    let query = start.expandTowardsCoords(movement.x, stepHeight, movement.z);
+    if (!landing) query = query.expandTowardsCoords(0, -9.999999747378752e-6, 0);
+
+    const colliders: AABB[] = [];
+    const heights = new Set<number>();
+    const landingHeight = f32(collided.y);
+    const bits = (min: number, max: number) => {
+      for (let b = 0; b <= 3; b++) {
+        const n = 1 << b;
+        if (Number.isInteger(min * n) && Number.isInteger(max * n)) return b;
+      }
+      return -1;
+    };
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.y = Math.floor(query.minY - 1e-7) - 1; cursor.y <= Math.floor(query.maxY + 1e-7) + 1; cursor.y++) {
+      for (cursor.z = Math.floor(query.minZ - 1e-7) - 1; cursor.z <= Math.floor(query.maxZ + 1e-7) + 1; cursor.z++) {
+        for (cursor.x = Math.floor(query.minX - 1e-7) - 1; cursor.x <= Math.floor(query.maxX + 1e-7) + 1; cursor.x++) {
+          const block = world.getBlock(cursor);
+          if (block == null || block.shapes.length === 0) continue;
+          const boxes = block.shapes.map((shape) => AABB.fromShape(shape).translate(cursor.x, cursor.y, cursor.z));
+          if (!boxes.some((box) => box.intersects(query))) continue;
+          colliders.push(...boxes);
+          for (const [minX, minY, minZ, maxX, maxY, maxZ] of block.shapes) {
+            const yBits = bits(minY, maxY);
+            const faces = yBits >= 0 && bits(minX, maxX) >= 0 && bits(minZ, maxZ) >= 0
+              ? Array.from({ length: (1 << yBits) + 1 }, (_, i) => i / (1 << yBits))
+              : [minY, maxY];
+            for (const face of faces) {
+              const height = f32(cursor.y + face - start.minY);
+              if (height < 0 || height === landingHeight) continue;
+              if (height > stepHeight) break;
+              heights.add(height);
+            }
+          }
+        }
+      }
+    }
+
+    const horizontalSqr = (vec: Vec3) => vec.x * vec.x + vec.z * vec.z;
+    for (const height of [...heights].sort((a, b) => a - b)) {
+      const stepped = this.collideWithShapes(new Vec3(movement.x, height, movement.z), start, colliders);
+      if (horizontalSqr(stepped) > horizontalSqr(collided)) {
+        return stepped.offset(0, start.minY - bb.minY, 0);
+      }
+    }
+    return collided;
   }
 
   collideBoundingBox(world: World, bb: AABB, movement: Vec3, colliders: AABB[] = []): Vec3 {
