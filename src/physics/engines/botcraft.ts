@@ -2171,15 +2171,19 @@ export class BotcraftPhysics implements IPhysics {
     }
     const aabb = player.getBB().expand(-1e-7, -1e-7, -1e-7);
     const [minAABB, maxAABB] = aabb.minAndMaxArrays();
-    const blockPos = new Vec3(0, 0, 0);
-    for (blockPos.y = Math.floor(minAABB[1]); blockPos.y <= Math.floor(maxAABB[1]); ++blockPos.y) {
-      for (blockPos.x = Math.floor(minAABB[0]); blockPos.x <= Math.floor(maxAABB[0]); ++blockPos.x) {
-        for (blockPos.z = Math.floor(minAABB[2]); blockPos.z <= Math.floor(maxAABB[2]); ++blockPos.z) {
-          const block = world.getBlock(blockPos);
-          if (block == null) continue;
-          this.entityInside(player, world, blockPos, block, worldSettings, true);
-        }
-      }
+    const [x0, y0, z0] = minAABB.map(Math.floor);
+    const [x1, y1, z1] = maxAABB.map(Math.floor);
+    const visit = (x: number, y: number, z: number) => {
+      const blockPos = new Vec3(x, y, z);
+      const block = world.getBlock(blockPos);
+      if (block != null) this.entityInside(player, world, blockPos, block, worldSettings, true);
+    };
+    if (this.verLessThan("1.21.2")) {
+      // Entity.checkInsideBlocks: x, then y, then z innermost
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) visit(x, y, z);
+    } else {
+      // BlockPos.betweenClosed of the box (BlockGetter.boxTraverseBlocks): z, then y, then x innermost
+      for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) visit(x, y, z);
     }
   }
 
