@@ -112,6 +112,8 @@ export class PlayerState implements IEntityState {
     public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
     public supportingBlockPos: Vec3 | null = null;
+    /** Entity.fallDistance: how far the player has fallen since it was last on ground (or reset). */
+    public fallDistance: number = 0;
     /**
      * Before 1.17: the bounding box vanilla keeps across ticks (the engine's last move left it here), with the position
      * and size it was left with. The engine starts from it while pos is still that position, else builds it from pos.
@@ -271,6 +273,7 @@ export class PlayerState implements IEntityState {
         this.pos.set(bot.entity.position.x, bot.entity.position.y, bot.entity.position.z);
         this.vel.set(bot.entity.velocity.x, bot.entity.velocity.y, bot.entity.velocity.z);
         this.supportingBlockPos = (bot.entity as any).supportingBlockPos ?? null;
+        this.fallDistance = (bot.entity as any).fallDistance ?? 0;
         this.onGround = bot.entity.onGround;
         this.lastOnGround = (bot.entity as any).lastOnGround ?? bot.entity.onGround;
         this.onClimbable = (bot.entity as any).onClimbable;
@@ -393,6 +396,7 @@ export class PlayerState implements IEntityState {
         (bot.entity as any).isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         (bot.entity as any).isCollidedVertically = this.isCollidedVertically;
         (bot.entity as any).supportingBlockPos = this.supportingBlockPos;
+        (bot.entity as any).fallDistance = this.fallDistance;
 
         // dunno what to do about these, ngl.
         (bot as any).jumpTicks = this.jumpTicks;
@@ -443,6 +447,7 @@ export class PlayerState implements IEntityState {
         tmp.isCollidedHorizontallyMinor = this.isCollidedHorizontallyMinor;
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
+        tmp.fallDistance = this.fallDistance;
         tmp.keptBoundingBox = this.keptBoundingBox;
         tmp.nearbyEntities = this.nearbyEntities;
 
@@ -519,6 +524,7 @@ export class PlayerState implements IEntityState {
         this.isCollidedHorizontallyMinor = other.isCollidedHorizontallyMinor
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
+        this.fallDistance = other.fallDistance;
         this.keptBoundingBox = other.keptBoundingBox;
         this.nearbyEntities = other.nearbyEntities;
 

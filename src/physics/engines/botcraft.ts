@@ -198,6 +198,7 @@ export class BotcraftPhysics implements IPhysics {
   /** The block's collision shapes where it is, for the player simulated. */
   private collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
     if (block.type === this.scaffoldId && this.collider) return this.scaffoldingShapes(block, this.collider) as AABBPoints[];
+    if (block.type === this.powderSnowId && this.collider) return this.powderSnowShapes(this.collider) as AABBPoints[];
     const maxOffset = this.offsetBlocks.get(block.type);
     if (maxOffset == null) return block.shapes as AABBPoints[];
     // minecraft-data's shapes carry the offset of the column at x 0, z 0
@@ -221,6 +222,14 @@ export class BotcraftPhysics implements IPhysics {
       return Math.min(Math.max(offset, -maxOffset), maxOffset);
     };
     return [axis(seed), axis(seed >> big(8))];
+  }
+
+  /**
+   * PowderSnowBlock.getCollisionShape (1.17+): 0.9F tall to an entity whose fall distance is over 2.5; nothing to a
+   * player without leather boots otherwise.
+   */
+  private powderSnowShapes(player: PlayerState): Block["shapes"] {
+    return player.fallDistance > 2.5 ? [[0, 0, 0, 1, 0.8999999761581421, 1]] : [];
   }
 
   /**
@@ -679,6 +688,10 @@ export class BotcraftPhysics implements IPhysics {
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);
 
+    // Entity.baseTick: touching water ends a fall, lava halves it
+    if (player.isInWater) player.fallDistance = 0;
+    if (player.isInLava) player.fallDistance *= 0.5;
+
     this.inputsToCrouch(ctx, heading, world);
     this.inputsToSprint(ctx, heading, world);
     this.inputsToFly(ctx);
@@ -750,6 +763,7 @@ export class BotcraftPhysics implements IPhysics {
         this.updatePoses(ctx, world);
       }
 
+      if (player.slowFalling > 0 || player.levitation > 0) player.fallDistance = 0;
       const velY = player.vel.y;
       this.movePlayer(ctx, world, sprintedBefore); // TODO: should be in player-specific logic??
       // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
@@ -759,6 +773,7 @@ export class BotcraftPhysics implements IPhysics {
       }
       if (player.flying) {
         player.vel.y = 0.6 * velY;
+        player.fallDistance = 0;
         /* player->SetDataSharedFlagsIdImpl(EntitySharedFlagsId::FallFlying, false); */ player.fallFlying = false;
       }
 
@@ -1572,6 +1587,7 @@ export class BotcraftPhysics implements IPhysics {
         player.onClimbable = this.isInClimbable(player, world);
         if (player.onClimbable) {
           // LivingEntity::handleOnClimbable
+          player.fallDistance = 0;
           player.vel.x = math.clamp(-0.15000000596046448, player.vel.x, 0.15000000596046448); // Math.fround(0.15)
           player.vel.z = math.clamp(-0.15000000596046448, player.vel.z, 0.15000000596046448); // Math.fround(0.15)
           // the fall is held at -0.15F since 1.14, at the double -0.15 before
@@ -1856,6 +1872,16 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
+    // Entity.checkFallDamage: falling adds to the fall distance (a float until 1.21.5, then no longer in water and
+    // counting the landing move too); landing ends it
+    if (this.verLessThan("1.21.5")) {
+      if (player.onGround) player.fallDistance = 0;
+      else if (movement.y < 0) player.fallDistance = Math.fround(player.fallDistance - Math.fround(movement.y));
+    } else {
+      if (!player.isInWater && movement.y < 0) player.fallDistance -= Math.fround(movement.y);
+      if (player.onGround) player.fallDistance = 0;
+    }
+
     // update speeds
     if (collisionX) {
       player.vel.x = 0.0;
@@ -2023,6 +2049,7 @@ export class BotcraftPhysics implements IPhysics {
           if (this.webId === block.type) {
             // WebBlock::entityInside
             player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
+            player.fallDistance = 0; // makeStuckInBlock
           } else if (this.bubblecolumnId === block.type) {
             const down = !block.metadata;
             const aboveBlock = world.getBlock(blockPos.offset(0, 1, 0));
@@ -2065,11 +2092,13 @@ export class BotcraftPhysics implements IPhysics {
           } else if (this.berryBushId === block.type) {
             // BerryBushBlock::entityInside
             player.stuckSpeedMultiplier = new Vec3(0.800000011920929, 0.75, 0.800000011920929); // magic number
+            player.fallDistance = 0; // makeStuckInBlock
           } else if (this.powderSnowId === block.type) {
             // PowderSnowBlock::entityInside
             const feetBlock = world.getBlock(new Vec3(player.pos.x, player.pos.y, player.pos.z));
             if (feetBlock && this.powderSnowId === feetBlock.type) {
               player.stuckSpeedMultiplier = new Vec3(0.8999999761581421, 1.5, 0.8999999761581421);
+              player.fallDistance = 0; // makeStuckInBlock
             }
           }
         }
