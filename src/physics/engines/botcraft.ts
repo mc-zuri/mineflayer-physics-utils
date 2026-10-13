@@ -29,6 +29,8 @@ type Heading = { forward: number; strafe: number };
 type World = { getBlock: world.WorldSync["getBlock"]};
 
 const COLLISION_EPSILON = 1e-7;
+/** The default world border's distance from 0 on x and z (WorldBorder's max radius). */
+const WORLD_BORDER_RADIUS = 29999984;
 
 /** Boats, chest boats and rafts: "boat" before 1.21.2, then one type per wood ("oak_boat", "bamboo_chest_raft"). */
 const isBoatName = (name: string) => /(^|_)(boat|raft)$/.test(name);
@@ -2001,14 +2003,16 @@ export class BotcraftPhysics implements IPhysics {
 
   /**
    * The block boxes a move of bb by (x, y, z) can meet before 1.14: World.getCollisionBoxes, the boxes intersecting the
-   * swept box. 1.13's IWorldReaderBase sweeps a box grown by 1e-7, leaves out the blocks bb already reaches into and
-   * lists the partial block shapes before the full cubes.
+   * swept box, a block outside the world border counting as stone. 1.13's IWorldReaderBase sweeps a box grown by 1e-7,
+   * leaves out the blocks bb already reaches into and lists the partial block shapes before the full cubes.
    */
   private legacyColliders(world: World, bb: AABB, x: number, y: number, z: number): AABB[] {
     const swept = bb.expandTowardsCoords(x, y, z);
-    if (this.verLessThan("1.13")) return this.getSurroundingBBs(swept, world).filter((box) => box.intersects(swept));
-    const query = swept.clone().expand(COLLISION_EPSILON, COLLISION_EPSILON, COLLISION_EPSILON);
+    const voxels = !this.verLessThan("1.13");
+    const query = voxels ? swept.clone().expand(COLLISION_EPSILON, COLLISION_EPSILON, COLLISION_EPSILON) : swept;
     const inside = bb.clone().expand(-COLLISION_EPSILON, -COLLISION_EPSILON, -COLLISION_EPSILON);
+    const outsideBorder = (cx: number, cz: number) =>
+      cx < -WORLD_BORDER_RADIUS || cx >= WORLD_BORDER_RADIUS || cz < -WORLD_BORDER_RADIUS || cz >= WORLD_BORDER_RADIUS;
     const partial: AABB[] = [];
     const full: AABB[] = [];
     const cursor = new Vec3(0, 0, 0);
@@ -2016,10 +2020,14 @@ export class BotcraftPhysics implements IPhysics {
       for (cursor.z = Math.floor(query.minZ); cursor.z <= Math.floor(query.maxZ); ++cursor.z) {
         for (cursor.x = Math.floor(query.minX); cursor.x <= Math.floor(query.maxX); ++cursor.x) {
           const block = world.getBlock(cursor) as Block | null;
-          if (block == null) continue;
-          const boxes = block.shapes.map((shape) => new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z));
+          const shapes = outsideBorder(cursor.x, cursor.z) ? [[0, 0, 0, 1, 1, 1]] : block?.shapes ?? [];
+          const boxes = shapes.map((shape) => new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z));
+          if (!voxels) {
+            partial.push(...boxes.filter((box) => box.intersects(query)));
+            continue;
+          }
           if (boxes.some((box) => box.intersects(inside)) || !boxes.some((box) => box.intersects(query))) continue;
-          const isFullCube = block.shapes.length === 1 && block.shapes[0].every((v, i) => v === (i < 3 ? 0 : 1));
+          const isFullCube = shapes.length === 1 && shapes[0].every((v, i) => v === (i < 3 ? 0 : 1));
           (isFullCube ? full : partial).push(...boxes);
         }
       }
