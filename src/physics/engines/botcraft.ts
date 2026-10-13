@@ -661,22 +661,24 @@ export class BotcraftPhysics implements IPhysics {
     // livingEntity::AiStep
     {
       player.jumpTicks = Math.max(0, player.jumpTicks - 1);
+      // the velocity below which an axis stops: 0.005 before 1.9 (EntityLivingBase.onLivingUpdate)
+      const negligeableVelocity = this.verLessThan("1.9") ? 0.005 : ctx.worldSettings.negligeableVelocity;
       if (this.verGreaterThan("1.21.4")) {
         const horizontalVelocitySqr = player.vel.x * player.vel.x + player.vel.z * player.vel.z;
-        const movementThresholdSqr = ctx.worldSettings.negligeableVelocity * ctx.worldSettings.negligeableVelocity;
+        const movementThresholdSqr = negligeableVelocity * negligeableVelocity;
         if (horizontalVelocitySqr < movementThresholdSqr) {
           player.vel.x = 0;
           player.vel.z = 0;
         }
       } else {
-        if (Math.abs(player.vel.x) < ctx.worldSettings.negligeableVelocity) {
+        if (Math.abs(player.vel.x) < negligeableVelocity) {
           player.vel.x = 0;
         }
-        if (Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity) {
+        if (Math.abs(player.vel.z) < negligeableVelocity) {
           player.vel.z = 0;
         }
       }
-      if (Math.abs(player.vel.y) < ctx.worldSettings.negligeableVelocity) {
+      if (Math.abs(player.vel.y) < negligeableVelocity) {
         player.vel.y = 0;
       }
 
