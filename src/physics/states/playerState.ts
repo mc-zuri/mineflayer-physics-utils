@@ -113,6 +113,8 @@ export class PlayerState implements IEntityState {
     public jumpTicks: number = 0;
     public jumpQueued: boolean = false;
     public sprintTriggerTime: number = 0;
+    /** The forward impulse of the tick before, slowed (before 1.21.5) or normalized (1.21.5+), not yet scaled by 0.98F. */
+    public prevForwardImpulse: number = 0;
     public flyJumpTriggerTime: number = 0;
 
     public sneakCollision: boolean = false;
@@ -434,6 +436,7 @@ export class PlayerState implements IEntityState {
         tmp.jumpQueued = this.jumpQueued ?? false;
         tmp.flyJumpTriggerTime = this.flyJumpTriggerTime ?? 0;
         tmp.sprintTriggerTime = this.sprintTriggerTime ?? 0;
+        tmp.prevForwardImpulse = this.prevForwardImpulse;
 
         // Input only (not modified)
         tmp.attributes = this.attributes;
@@ -505,6 +508,7 @@ export class PlayerState implements IEntityState {
         this.jumpQueued = other.jumpQueued ?? false;
         this.flyJumpTriggerTime = other.flyJumpTriggerTime ?? 0;
         this.sprintTriggerTime = other.sprintTriggerTime ?? 0;
+        this.prevForwardImpulse = other.prevForwardImpulse ?? 0;
 
         // Input only (not modified)
         this.attributes = other.attributes;

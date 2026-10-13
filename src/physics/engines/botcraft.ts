@@ -777,10 +777,38 @@ export class BotcraftPhysics implements IPhysics {
   private inputsToSprint(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
 
-    // console.log('is sprinting', player.sprinting, 'can sprint', this.canStartSprinting(ctx, heading), player.sprinting)
-    if (this.canStartSprinting(ctx, heading, world) &&
-      (player.control.sprint || (player.sprintTriggerTime > 0 && this.hasEnoughImpulseToStartSprinting(player, heading)))) {
-      this.setSprinting(ctx, true);
+    // LocalPlayer.aiStep: the sprint key starts a sprint, and so does a double tap of forward: a fresh forward press
+    // opens a 7-tick window (sprintTriggerTime) in which the next one sprints. Item use (and 1.16+ the sneak key of
+    // the tick before, 1.21.5+ the back key) closes it.
+    if (player.sprintTriggerTime > 0) player.sprintTriggerTime--;
+    const prevSneakKey = player.prevControl.sneak;
+    if (
+      player.isUsingItem ||
+      (this.verGreaterThan("1.15.2") && prevSneakKey) ||
+      (this.verGreaterThan("1.21.4") && player.control.back)
+    ) {
+      player.sprintTriggerTime = 0;
+    }
+    const canStart = this.canStartSprinting(ctx, heading, world);
+    const prevImpulse = player.prevForwardImpulse;
+    player.prevForwardImpulse = heading.forward;
+    if (this.verGreaterThan("1.21.4")) {
+      if (canStart) {
+        if (!(prevImpulse > 1e-5)) {
+          if (player.sprintTriggerTime > 0) this.setSprinting(ctx, true);
+          else player.sprintTriggerTime = 7;
+        }
+        if (player.control.sprint) this.setSprinting(ctx, true);
+      }
+    } else {
+      // forward was enough to sprint the tick before (1.14+ by this tick's eyes in water); 1.13+ also under water
+      const prevEnough = this.verGreaterThan("1.13.2") && player.isUnderWater ? prevImpulse > 1e-5 : prevImpulse >= 0.8;
+      const onGroundOrUnderWater = player.onGround || (this.verGreaterThan("1.12.2") && player.isUnderWater);
+      if (canStart && onGroundOrUnderWater && !prevSneakKey && !prevEnough) {
+        if (player.sprintTriggerTime <= 0 && !player.control.sprint) player.sprintTriggerTime = 7;
+        else this.setSprinting(ctx, true);
+      }
+      if (canStart && player.control.sprint) this.setSprinting(ctx, true);
     }
 
     // console.log('should stop', this.shouldStopRunSprinting(ctx, heading), 'minor collision', player.isCollidedHorizontallyMinor)
