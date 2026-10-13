@@ -1052,7 +1052,9 @@ export class BotcraftPhysics implements IPhysics {
         if (this.verLessThan("1.21")) {
           depthStriderMult = Math.fround(Math.min(player.depthStrider, 3));
         } else {
-          depthStriderMult = player.attributes[this.waterMovementEfficiencyAttribute]?.value ?? 0; // random value as default
+          // the synced attribute with its modifiers (depth strider adds 0.33333334 per level)
+          const synced = player.attributes[this.waterMovementEfficiencyAttribute];
+          depthStriderMult = synced ? Math.fround(attributes.getAttributeValue(synced)) : 0;
         }
 
         if (!player.onGround) {

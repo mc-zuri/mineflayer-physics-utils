@@ -84,8 +84,8 @@ describe("Botcraft water physics", () => {
           if (version === "1.18.2") {
             playerState.depthStrider = 3;
           } else {
-            const playerAttributes = playerState.attributes as Record<string, { value: number }>;
-            playerAttributes[physics.waterMovementEfficiencyAttribute] = { value: 1 };
+            const playerAttributes = playerState.attributes as Record<string, { value: number; modifiers: [] }>;
+            playerAttributes[physics.waterMovementEfficiencyAttribute] = { value: 1, modifiers: [] };
           }
 
           physics.movePlayer(playerCtx, world);
