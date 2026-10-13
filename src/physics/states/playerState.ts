@@ -353,18 +353,17 @@ export class PlayerState implements IEntityState {
         this.crouching = (bot.entity as any).crouching ?? false;
         this.fallFlying = (bot.entity as any).fallFlying ?? (bot.entity as any).elytraFlying ?? false;
 
+        // Abilities.getFlyingSpeed: the flying speed the server sent (ClientboundPlayerAbilitiesPacket), in every game mode
+        this.flySpeed = (bot.entity as { abilities?: { flyingSpeed?: number } }).abilities?.flyingSpeed ?? Math.fround(0.05);
         switch (bot.game.gameMode) {
             case "creative":
-                this.flySpeed = 0.05;
                 this.mayFly = true;
                 break;
             case "spectator":
-                this.flySpeed = 0.1;
                 this.mayFly = true;
                 break;
             case "survival":
             case "adventure":
-                this.flySpeed = 0.05; // same as creative
                 this.mayFly = (bot.entity as any).canFly;
                 break;
             default:
