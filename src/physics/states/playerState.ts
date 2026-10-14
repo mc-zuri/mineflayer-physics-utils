@@ -20,6 +20,41 @@ import type { Entity } from "prismarine-entity";
 import { PlayerPoses, getCollider, playerPoseSize } from "./poses";
 import { Heading, getPose } from "./entityPose";
 
+// The entities that are no LivingEntity (or, as the armor stand, push no player), by their names across versions in
+// snake case (1.8 - 1.10 name them "XPOrb", "ThrownEnderpearl", "MinecartRideable"; mineflayer names some old objects
+// by their display name, as "Fishing Hook").
+const NOT_LIVING = /(^|_)(thrown_[a-z_]+|minecart_[a-z_]+|xporb|primed_tnt|falling_sand|fireworks_rocket_entity|fishing_hook|item|xp_orb|experience_orb|area_effect_cloud|arrow|snowball|egg|fireball|ender_pearl|eye_of_ender|eye_of_ender_signal|potion|xp_bottle|experience_bottle|wither_skull|fireworks_rocket|firework_rocket|shulker_bullet|llama_spit|trident|fishing_bobber|boat|raft|minecart|tnt|falling_block|painting|item_frame|leash_knot|ender_crystal|end_crystal|evocation_fangs|evoker_fangs|lightning_bolt|marker|display|interaction|ominous_item_spawner|wind_charge|armor_stand|unknown)$/;
+
+// mineflayer's entity types of what is no LivingEntity (spawned as an object, an experience orb, a lightning bolt...).
+const NOT_LIVING_TYPES = new Set(["object", "orb", "global", "other", "projectile"]);
+
+/** The type name in today's form: "Boat" (1.8 - 1.10) is "boat", "MushroomCow" "mushroom_cow", "Fishing Hook" "fishing_hook". */
+const snakeCase = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase();
+
+/**
+ * The bot's other entities within 16 blocks, as the engine takes them: the box from the position and the float
+ * dimensions (EntityDimensions.makeBoundingBox); not living when mineflayer spawned it as no mob, or by its name.
+ */
+function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
+    const self = bot.entity;
+    const out: NearbyEntity[] = [];
+    for (const other of Object.values(bot.entities ?? {})) {
+        if (other === self || other.id === self.id || !other.name || other.width == null || other.height == null) continue;
+        const { x, y, z } = other.position;
+        if (Math.max(Math.abs(x - self.position.x), Math.abs(y - self.position.y), Math.abs(z - self.position.z)) > 16) continue;
+        const name = snakeCase(other.name);
+        const halfWidth = Math.fround(Math.fround(other.width) / 2);
+        const height = Math.fround(other.height);
+        out.push({
+            name,
+            living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
+            position: other.position.clone(),
+            boundingBox: new AABB(x - halfWidth, y, z - halfWidth, x + halfWidth, y + height, z + halfWidth),
+        });
+    }
+    return out;
+}
+
 
 export function convInpToAxes(player: PlayerState): Heading {
     return {
@@ -358,6 +393,7 @@ export class PlayerState implements IEntityState {
         this.pose = (bot.entity as Entity & { pose?: PlayerPoses }).pose ?? getPose(bot.entity);
         this.gameMode = bot.game.gameMode;
         this.food = bot.food;
+        this.nearbyEntities = nearbyEntitiesOf(bot);
 
         // TODO:
         this.swimming = (bot.entity as any).swimming ?? false;
