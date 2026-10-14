@@ -461,6 +461,10 @@ export class BotcraftPhysics implements IPhysics {
     } else {
       player.isInLava = false;
       player.isUnderLava = false;
+      if (this.verLessThan("1.14")) {
+        player.isInLava = this.isInLavaLegacy(player, world);
+        return;
+      }
     }
 
     const minAABB = aabb.minPoint();
@@ -598,6 +602,24 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     return flow.normalize();
+  }
+
+  /**
+   * Entity.isInLava before 1.14: any lava block, whatever its level, in the box shrunk by 0.1F sideways and 0.4F
+   * vertically (World.isMaterialInBB / containsMaterial, the cells floor(min) to ceil(max) exclusive). Vanilla asks
+   * it live, so it holds for the position before the move during the tick and is asked again after it.
+   */
+  private isInLavaLegacy(player: PlayerState, world: World) {
+    const bb = getCollider(player.pose, player.pos).expand(-Math.fround(0.1), -Math.fround(0.4), -Math.fround(0.1));
+    const cursor = new Vec3(0, 0, 0);
+    for (cursor.x = Math.floor(bb.minX); cursor.x < Math.ceil(bb.maxX); cursor.x++) {
+      for (cursor.y = Math.floor(bb.minY); cursor.y < Math.ceil(bb.maxY); cursor.y++) {
+        for (cursor.z = Math.floor(bb.minZ); cursor.z < Math.ceil(bb.maxZ); cursor.z++) {
+          if (world.getBlock(cursor)?.type === this.lavaId) return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -782,6 +804,8 @@ export class BotcraftPhysics implements IPhysics {
       const { x: startX, z: startZ } = player.pos;
       this.movePlayer(ctx, world, sprintedBefore); // TODO: should be in player-specific logic??
       this.updateAutoJump(ctx, world, Math.fround(player.pos.x - startX), Math.fround(player.pos.z - startZ), moveVector);
+      // before 1.14 isInLava is asked live: after the move it tells the new position
+      if (this.verLessThan("1.14")) player.isInLava = this.isInLavaLegacy(player, world);
       // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
       if (!this.verLessThan("1.21.2")) {
         this.stepOn(player, world);
