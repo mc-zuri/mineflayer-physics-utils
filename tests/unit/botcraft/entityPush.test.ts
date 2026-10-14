@@ -89,4 +89,29 @@ describe("Botcraft boat push", () => {
       expect(rig.playerState.vel.x).toBe(0.06758154708392641);
     });
   }
+
+  // v_boat_dismount on 1.15.2, tick 23: the player has just left the boat it steered, shown under it at x
+  // 5.653907637539506, which the server sent back to x 5.337675300844518. The boat ticks after the player: it first
+  // eases a tenth of the way there (Boat.tickLerp), then pushes the player from there (Boat.tick, Boat.push).
+  it("is pushed from where the boat's own tick leaves it (1.15.2, v_boat_dismount)", () => {
+    const version = "1.15.2";
+    const boatAt = (x: number, y: number) => ({
+      position: new Vec3(x, y, 2125.5),
+      boundingBox: new AABB(x - 0.6875, y, 2124.8125, x + 0.6875, y + 0.5625, 2126.1875),
+    });
+    const rig = createBotcraftPlayerRig({ version, position: new Vec3(5.653907637539506, 100.07326531022936, 2125.5) });
+    rig.playerState.vel.set(0, -0.0784000015258789, 0);
+    rig.playerState.yawDegrees = 270;
+    rig.playerState.nearbyEntities = [{
+      name: "boat",
+      living: false,
+      ...boatAt(5.653907637539506, 100.52326529830843),
+      afterTick: boatAt(5.622284403870007, 100.52326536116496),
+    }];
+
+    rig.physics.simulate(rig.playerCtx, createFlatWorld(version, 90) as any);
+
+    expect(rig.playerState.pos.y).toBe(99.99486530870348);
+    expect(rig.playerState.vel.x).toBe(0.00889146170192836);
+  });
 });

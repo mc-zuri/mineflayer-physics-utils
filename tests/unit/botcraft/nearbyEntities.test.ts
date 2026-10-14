@@ -70,6 +70,30 @@ describe("PlayerState nearby entities", () => {
     expect(ticks(stateWith([cow(13, 0.9)], "1.17.1"))).toEqual([[0.9, false]]);
   });
 
+  // v_boat_dismount on 1.15.2, tick 23: the boat the player left shows at x 5.653907637539506, easing toward the
+  // server's x 5.337675300844518; its tick (Boat.tickLerp) takes it to x 5.622284403870007, mineflayer's next step.
+  it("takes where an entity's own tick leaves it from mineflayer's interpolation, but not for the vehicle, which had it", () => {
+    const rig = createBotcraftPlayerRig({ version: "1.15.2", position: new Vec3(5.653907637539506, 100.07326531022936, 2125.5) });
+    const boat = {
+      id: 19, name: "boat", width: 1.375, height: 0.5625,
+      position: new Vec3(5.337675300844518, 100.52326592687379, 2125.5),
+      interpolatedPosition: new Vec3(5.653907637539506, 100.52326529830843, 2125.5),
+    };
+    rig.fakePlayer.entity.id = 1;
+    rig.fakePlayer.entities = { 1: rig.fakePlayer.entity, 19: boat };
+    rig.fakePlayer.entityInterpolation = { next: () => new Vec3(5.622284403870007, 100.52326536116496, 2125.5) };
+
+    rig.playerState.update(rig.fakePlayer);
+    const [left] = rig.playerState.nearbyEntities;
+    expect(left.position.x).toBe(5.653907637539506);
+    expect(left.afterTick?.position.x).toBe(5.622284403870007);
+    expect(left.afterTick?.boundingBox.toArray()).toEqual([4.934784403870007, 100.52326536116496, 2124.8125, 6.309784403870007, 101.08576536116496, 2126.1875]);
+
+    rig.fakePlayer.vehicle = boat;
+    rig.playerState.update(rig.fakePlayer);
+    expect(rig.playerState.nearbyEntities[0].afterTick).toBeUndefined();
+  });
+
   it("leaves out the player itself and entities farther than 16 blocks", () => {
     const state = stateWith([{ id: 40, name: "cow", position: new Vec3(20, 101, 38.5), width: 0.9, height: 1.4 }]);
     expect(state.nearbyEntities).toEqual([]);

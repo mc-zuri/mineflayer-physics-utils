@@ -62,4 +62,6 @@ export interface NearbyEntity {
   boundingBox: AABB;
   /** It ticks before the local player (the client's entity order, 1.14 - 1.16), so its push comes before the player's tick. */
   ticksBeforePlayer?: boolean;
+  /** Where its own tick of this client tick leaves it (the next step of its interpolation), the place it pushes from. */
+  afterTick?: { position: Vec3; boundingBox: AABB };
 }

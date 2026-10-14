@@ -433,21 +433,24 @@ export class BotcraftPhysics implements IPhysics {
    * EntitySelector.pushableBy): a mob whose box meets the player's (LivingEntity.pushEntities), a boat whose box grown
    * by 0.2, -0.01, 0.2 meets it while the player's feet are not above the boat's (Boat.tick, Boat.push). The player,
    * if pushable (alive, not a spectator, not on a climbable), gets Entity.push away from the other's centre. Those the
-   * client ticks before the player (ticksBeforePlayer, 1.14 - 1.16) push it before its tick.
+   * client ticks before the player (ticksBeforePlayer, 1.14 - 1.16) push it before its tick. Each pushes from where
+   * its own tick left it (afterTick: a boat steps its interpolation in Boat.tickLerp, a mob in LivingEntity.aiStep,
+   * before they push).
    */
   private pushByNearbyEntities(player: PlayerState, beforePlayer: boolean) {
     if (this.verLessThan("1.9") || player.gameMode === "spectator" || player.onClimbable) return;
     const box = player.getBB();
     for (const other of player.nearbyEntities) {
       if (!!other.ticksBeforePlayer !== beforePlayer) continue;
-      const { minX, minY, minZ, maxX, maxY, maxZ } = other.boundingBox;
+      const { position, boundingBox } = other.afterTick ?? other;
+      const { minX, minY, minZ, maxX, maxY, maxZ } = boundingBox;
       if (isBoatName(other.name)) {
         const reach = new AABB(minX, minY, minZ, maxX, maxY, maxZ).expand(0.20000000298023224, -0.009999999776482582, 0.20000000298023224);
         if (!box.intersects(reach) || box.minY > minY) continue;
-      } else if (!other.living || !box.intersects(other.boundingBox)) {
+      } else if (!other.living || !box.intersects(boundingBox)) {
         continue;
       }
-      this.pushAwayFrom(player, other.position);
+      this.pushAwayFrom(player, position);
     }
   }
 

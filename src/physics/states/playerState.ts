@@ -58,13 +58,15 @@ function entitySlots(bot: Bot): Map<number, number> | null {
  * The bot's other entities within 16 blocks, as the engine takes them: where the client shows them (mineflayer's
  * interpolatedPosition, the server's position when it has none), the box from it and the float dimensions
  * (EntityDimensions.makeBoundingBox); not living when mineflayer spawned it as no mob, or by its name. On 1.14 - 1.16
- * they come in the client's tick order, those it ticks before the player marked.
+ * they come in the client's tick order, those it ticks before the player marked. Each pushes from where its own tick
+ * leaves it, the next step of mineflayer's interpolation (bot.entityInterpolation.next).
  */
 function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
     const self = bot.entity;
     const slots = entitySlots(bot);
     const slotOf = (id: number) => slots?.get(id) ?? -1;
     const out: [number, NearbyEntity][] = [];
+    const interpolation = (bot as { entityInterpolation?: { next?: (entity: Entity) => Vec3 } }).entityInterpolation;
     for (const other of Object.values(bot.entities ?? {})) {
         if (other === self || other.id === self.id || !other.name || other.width == null || other.height == null) continue;
         const shown = (other as { interpolatedPosition?: Vec3 }).interpolatedPosition ?? other.position;
@@ -73,12 +75,16 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
         const name = snakeCase(other.name);
         const halfWidth = Math.fround(Math.fround(other.width) / 2);
         const height = Math.fround(other.height);
+        const boxAt = (p: Vec3) => new AABB(p.x - halfWidth, p.y, p.z - halfWidth, p.x + halfWidth, p.y + height, p.z + halfWidth);
+        // (the vehicle had its tick already, before its passenger's)
+        const ticked = other !== bot.vehicle ? interpolation?.next?.(other) : undefined;
         out.push([slotOf(other.id), {
             name,
             living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
             position: shown.clone(),
-            boundingBox: new AABB(x - halfWidth, y, z - halfWidth, x + halfWidth, y + height, z + halfWidth),
+            boundingBox: boxAt(shown),
             ticksBeforePlayer: slots != null && slotOf(other.id) > slotOf(self.id),
+            afterTick: ticked && { position: ticked, boundingBox: boxAt(ticked) },
         }]);
     }
     if (slots != null) out.sort((a, b) => b[0] - a[0]);
