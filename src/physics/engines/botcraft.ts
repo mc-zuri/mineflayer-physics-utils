@@ -1972,6 +1972,10 @@ export class BotcraftPhysics implements IPhysics {
 
         if (player.levitation > 0) {
           player.vel.y += (0.05 * player.levitation - player.vel.y) * 0.2;
+        } else if (this.verLessThan("1.14") && !this.columnLoaded(player, world)) {
+          // LivingEntity.travel before 1.14: a client player over a column that is not loaded sinks at 0.1 (no motion
+          // at y 0 and below)
+          player.vel.y = player.pos.y > 0 ? -0.1 : 0;
         } else {
           player.vel.y -= gravity;
         }
@@ -2553,6 +2557,12 @@ export class BotcraftPhysics implements IPhysics {
       player.vel.x *= factor;
       player.vel.z *= factor;
     }
+  }
+
+  /** Whether the chunk column under the player is loaded: its x, z cast to int on 1.8, floored since. */
+  private columnLoaded(player: PlayerState, world: World): boolean {
+    const round = this.verLessThan("1.9") ? Math.trunc : Math.floor;
+    return world.getBlock(new Vec3(round(player.pos.x), 0, round(player.pos.z))) != null;
   }
 
   /**
