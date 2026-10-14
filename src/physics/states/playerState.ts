@@ -291,6 +291,9 @@ export class PlayerState implements IEntityState {
         this.validElytraEquipped = isUsableElytraItem(bot.inventory.slots[bot.getEquipmentDestSlot('torso')]);
         this.canWalkOnPowderSnow = bot.inventory.slots[bot.getEquipmentDestSlot('feet')]?.name === 'leather_boots';
         this.fireworkRocketDuration = bot.fireworkRocketDuration;
+        // the rockets attached to the bot this tick, and how many of them the client ticks before it (when the bot says)
+        this.fireworkRockets = (bot as { fireworkRockets?: number }).fireworkRockets ?? 0;
+        this.fireworkRocketsBeforePlayer = (bot as { fireworkRocketsBeforePlayer?: number }).fireworkRocketsBeforePlayer ?? 0;
         this.isCollidedHorizontally = (bot.entity as any).isCollidedHorizontally;
         this.isCollidedHorizontallyMinor = (bot.entity as any).isCollidedHorizontallyMinor;
         this.isCollidedVertically = (bot.entity as any).isCollidedVertically;
