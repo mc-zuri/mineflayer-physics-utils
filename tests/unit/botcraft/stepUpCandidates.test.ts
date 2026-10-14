@@ -21,7 +21,7 @@ describe("Botcraft step up", () => {
         for (let z = 1420; z <= 1422; z++) world.setOverrideBlock(new Vec3(blockX, 101, z), lantern.type, lantern.metadata);
       }
       rig.playerState.vel.set(0.1528560218142385, -0.0784000015258789, 0);
-      rig.playerState.sprinting = true;
+      rig.physics.setSprinting(rig.playerCtx, true); // (with its speed modifier)
       rig.playerState.yawDegrees = 270;
       rig.playerState.control.forward = true;
       rig.playerState.control.sprint = true;

@@ -30,7 +30,7 @@ describe("Botcraft sprint jump", () => {
         groundLevel,
       });
       rig.playerState.vel.set(0.03030361534395634, -0.0784000015258789, start.velZ);
-      rig.playerState.sprinting = true;
+      rig.physics.setSprinting(rig.playerCtx, true); // (with its speed modifier)
       rig.playerState.yawDegrees = 210;
       rig.playerState.control.forward = true;
       rig.playerState.control.sprint = true;

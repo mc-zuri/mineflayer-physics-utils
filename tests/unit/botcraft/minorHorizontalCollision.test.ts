@@ -62,7 +62,7 @@ describe("Botcraft minor horizontal collision", () => {
         state.vel = new Vec3(...vel);
         state.onGround = true;
         state.yawDegrees = yaw;
-        state.sprinting = sprint;
+        rig.physics.setSprinting(rig.playerCtx, sprint); // (with its speed modifier)
         state.control.forward = true;
         state.control.sprint = sprint;
 

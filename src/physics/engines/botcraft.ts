@@ -1761,9 +1761,8 @@ export class BotcraftPhysics implements IPhysics {
    * @returns
    */
  getMovementSpeedAttribute(entity: EPhysicsCtx) {
-    const isSprinting = entity.state instanceof PlayerState && entity.state.sprinting;
     let attribute;
-    
+
     // In 1.21+, this should map to 'minecraft:movement_speed'
     if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
       attribute = entity.state.attributes[this.movementSpeedAttribute];
@@ -1772,16 +1771,8 @@ export class BotcraftPhysics implements IPhysics {
       attribute = attributes.createAttributeValue(Math.fround(entity.worldSettings.playerSpeed));
     }
 
-    // --- SPRINTING ---
-    attribute = attributes.deleteAttributeModifier(attribute, entity.worldSettings.sprintingUUID);
-    if (isSprinting) {
-      attribute = attributes.addAttributeModifier(attribute, {
-        uuid: entity.worldSettings.sprintingUUID,
-        // Math.fround(0.3) perfectly resolves to 0.30000001192092896
-        amount: Math.fround(0.3), 
-        operation: 2,
-      });
-    }
+    // (the sprint modifier is the attribute's own: setSprinting adds and removes it, and a sync from the server that
+    // lacks it drops it until the next setSprinting, as vanilla's LivingEntity.getSpeed reads it)
 
     // The speed and slowness effects are not applied here: like vanilla's client, the engine takes their modifiers
     // from the movement speed the server synced (the server adds them with the effect).
