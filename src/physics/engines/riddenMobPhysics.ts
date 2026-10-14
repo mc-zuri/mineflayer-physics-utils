@@ -109,7 +109,18 @@ export class RiddenMobPhysics extends BotcraftPhysics {
         mob.standCounter = 0;
         mob.standing = false;
       }
-      if (!mob.standing) mob.allowStandSliding = false;
+      // its stand animation (which seats its rider back and up): toward 1 while it rears, back toward 0 after
+      const f32 = Math.fround;
+      mob.standAnimO = mob.standAnim;
+      if (mob.standing) {
+        mob.standAnim = f32(mob.standAnim + f32(f32(f32(1 - mob.standAnim) * f32(0.4)) + f32(0.05)));
+        if (mob.standAnim > 1) mob.standAnim = 1;
+      } else {
+        mob.allowStandSliding = false;
+        const cube = f32(f32(f32(f32(0.8) * mob.standAnim) * mob.standAnim) * mob.standAnim);
+        mob.standAnim = f32(mob.standAnim + f32(f32(f32(cube - mob.standAnim) * f32(0.6)) - f32(0.05)));
+        if (mob.standAnim < 0) mob.standAnim = 0;
+      }
     }
 
     // Camel.tick, after the move: the dash ends on landing, its cooldown runs down

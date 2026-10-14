@@ -85,6 +85,9 @@ export class RiddenMobState extends PlayerState {
   public allowStandSliding = false;
   /** AbstractHorse.standCounter: the ticks the rearing the horse started itself has lasted (or, from 1.21.6, has left) */
   public standCounter = 0;
+  /** AbstractHorse.standAnim and standAnimO: its stand animation now and before its last tick (0 - 1, in float) */
+  public standAnim = 0;
+  public standAnimO = 0;
 
   constructor(ctx: IPhysics, init: RiddenMobInit) {
     super(ctx, fakeBot(init));

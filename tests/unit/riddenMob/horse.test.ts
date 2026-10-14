@@ -87,6 +87,30 @@ describe("RiddenMobPhysics horse rearing", () => {
   }
 });
 
+// v_horse_jump_full_charge on 1.21.11: the horse rears from tick 14 to 33 and its rider sits back on it by
+// 0.7 * standAnimO (AbstractHorse.getPassengerAttachmentPoint, facing east): the recorded rider x on its horse at x 0.5,
+// ticks 15 - 19 while it rears, 34 - 38 after
+describe("RiddenMobPhysics horse stand animation", () => {
+  it("grows while the horse rears and falls back after (1.21.11, v_horse_jump_full_charge)", () => {
+    const world = createFlatWorld("1.21.11", 101);
+    const { physics, state, ctx } = createRiddenMobRig({ version: "1.21.11", type: "horse", pos: [0.5, 101, 2173.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+    state.movementSpeed = 0.225;
+    const rider = { yawDegrees: 270, pitchDegrees: 0, xxa: 0, zza: 0 };
+    const seats = (ticks: number) => {
+      const xs: number[] = [];
+      for (let t = 0; t < ticks; t++) {
+        physics.simulateRidden(ctx, world as any, rider);
+        xs.push(0.5 + -0.7 * state.standAnimO);
+      }
+      return xs;
+    };
+    state.standing = true;
+    expect(seats(6)).toEqual([0.5, 0.1849999874830246, -0.0040000200271606, -0.11740002036094666, -0.18544000387191772, -0.19999999999999996]);
+    state.standing = false;
+    expect(seats(6)).toEqual([-0.19999999999999996, -0.08099998831748956, 0.11047956943511966, 0.32129752039909365, 0.4579286828637123, 0.5]);
+  });
+});
+
 // m_horse on 1.21.11: the server teleports the horse its rider controls one block east (a relative /tp at tick 24);
 // the horse eases there over 3 ticks while the vehicle move reports the target (ServerboundMoveVehiclePacket.fromEntity).
 describe("RiddenMobPhysics teleport", () => {
