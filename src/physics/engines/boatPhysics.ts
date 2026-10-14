@@ -271,6 +271,10 @@ export class BoatPhysics extends EntityPhysics {
     return maxY + 1;
   }
 
+  /**
+   * Boat.getGroundFriction: the float average of the friction of the blocks whose collision shape meets the slice
+   * under the boat, each block counted once (a lily pad not at all).
+   */
   private getGroundFriction(bb: AABB, world: PhysicsWorld, cfg: BoatPhysicsSettings): number {
     const groundBB = new AABB(bb.minX, bb.minY - 0.001, bb.minZ, bb.maxX, bb.minY, bb.maxZ);
     const minX = Math.floor(groundBB.minX) - 1;
@@ -294,23 +298,22 @@ export class BoatPhysics extends EntityPhysics {
           if (edge <= 0 || (cursor.y !== minY && cursor.y !== maxY - 1)) {
             const block = world.getBlock(cursor);
             if (!block || block.boundingBox === "empty") continue;
-            if (block.name === "lily_pad") continue;
+            if (block.name === "lily_pad" || block.name === "waterlily") continue;
             const shapes = block.shapes;
             if (!shapes?.length) continue;
-            for (const shape of shapes) {
-              const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
-              blockBB.translate(cursor.x, cursor.y, cursor.z);
-              if (blockBB.intersects(groundBB)) {
-                frictionSum += this.blockSlipperiness[block.type] ?? cfg.defaultBlockFriction;
-                count++;
-              }
+            const meets = shapes.some((shape) =>
+              new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z).intersects(groundBB),
+            );
+            if (meets) {
+              frictionSum = Math.fround(frictionSum + Math.fround(this.blockSlipperiness[block.type] ?? cfg.defaultBlockFriction));
+              count++;
             }
           }
         }
       }
     }
 
-    return count > 0 ? frictionSum / count : 0;
+    return count > 0 ? Math.fround(frictionSum / count) : 0;
   }
 
   private isWaterBlock(block: Block | null | undefined): block is Block {
