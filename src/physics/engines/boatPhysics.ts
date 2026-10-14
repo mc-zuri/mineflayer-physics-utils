@@ -43,9 +43,65 @@ export class BoatPhysics extends EntityPhysics {
     this.controlBoat(state);
     state.lastVerticalVelocity = state.vel.y;
 
-    this.moveEntity(simCtx, state.vel.x, state.vel.y, state.vel.z, world);
+    this.move(simCtx, state, world);
     state.age++;
     return state;
+  }
+
+  /**
+   * Entity.move for the boat (no step): the motion collided with the blocks, y first, then x and z (from 1.14 the
+   * larger of the two first, and an axis under 1.0E-7 that meets a block does not move). Before 1.14 the position
+   * is the moved box's (centre x / z, bottom y); 1.14 - 1.21.1 move only by more than 1.0E-7 squared, 1.21.2+ also
+   * when nothing blocked the motion. A blocked horizontal axis stops (1.14+ beyond Mth.equal's 1.0E-5F), and a
+   * blocked vertical motion lands.
+   */
+  private move(simCtx: EPhysicsCtx, state: BoatState, world: PhysicsWorld): void {
+    const legacy = this.data.version["<"]("1.14");
+    const want = { x: state.vel.x, y: state.vel.y, z: state.vel.z };
+    const bb = this.getBoatBB(simCtx, state);
+    const colliders = this.getSurroundingBBs(bb.clone().extend(want.x, want.y, want.z), world);
+    const along = (axis: "x" | "y" | "z", d: number) => {
+      if (d === 0) return 0;
+      if (colliders.length > 0 && !legacy && Math.abs(d) < 1.0e-7) return 0;
+      for (const block of colliders) {
+        d = axis === "x" ? block.computeOffsetX(bb, d) : axis === "y" ? block.computeOffsetY(bb, d) : block.computeOffsetZ(bb, d);
+      }
+      bb.translate(axis === "x" ? d : 0, axis === "y" ? d : 0, axis === "z" ? d : 0);
+      return d;
+    };
+    const moved = { x: 0, y: along("y", want.y), z: 0 };
+    if (!legacy && Math.abs(want.x) < Math.abs(want.z)) {
+      moved.z = along("z", want.z);
+      moved.x = along("x", want.x);
+    } else {
+      moved.x = along("x", want.x);
+      moved.z = along("z", want.z);
+    }
+
+    if (legacy) {
+      state.pos.x = (bb.minX + bb.maxX) / 2;
+      state.pos.y = bb.minY;
+      state.pos.z = (bb.minZ + bb.maxZ) / 2;
+    } else {
+      const movedSqr = moved.x * moved.x + moved.y * moved.y + moved.z * moved.z;
+      const wantSqr = want.x * want.x + want.y * want.y + want.z * want.z;
+      const unblocked = !this.data.version["<"]("1.21.2") && wantSqr - movedSqr < 1.0e-7;
+      if (movedSqr > 1.0e-7 || unblocked) {
+        state.pos.x += moved.x;
+        state.pos.y += moved.y;
+        state.pos.z += moved.z;
+      }
+    }
+
+    const differs = (a: number, b: number) => (legacy ? a !== b : Math.abs(b - a) >= Math.fround(1.0e-5));
+    const blockedX = differs(want.x, moved.x);
+    const blockedZ = differs(want.z, moved.z);
+    state.isCollidedHorizontally = blockedX || blockedZ;
+    state.isCollidedVertically = want.y !== moved.y;
+    state.onGround = state.isCollidedVertically && want.y < 0;
+    if (blockedX) state.vel.x = 0;
+    if (blockedZ) state.vel.z = 0;
+    if (state.isCollidedVertically) state.vel.y = 0;
   }
 
   private getBoatBB(simCtx: EPhysicsCtx, state: BoatState): AABB {

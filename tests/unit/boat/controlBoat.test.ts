@@ -45,8 +45,7 @@ describe("Boat controlBoat", () => {
         simulateBoatTick(rig);
         expect(state.yawDegrees).toBe(Math.fround(expected.yaw));
         expect([state.vel.x, state.vel.y, state.vel.z]).toEqual(expected.vel);
-        // (before 1.14 Entity.move takes the position from the moved box, which the engine does not do yet)
-        if (version !== "1.12.2") expect([state.pos.x, state.pos.y, state.pos.z]).toEqual(expected.pos);
+        expect([state.pos.x, state.pos.y, state.pos.z]).toEqual(expected.pos);
       }
     });
   }
