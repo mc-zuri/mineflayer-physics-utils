@@ -23,6 +23,16 @@ export class BoatPhysics extends EntityPhysics {
     this.mth = mthFor(!mcData.version["<"]("1.21.11"));
   }
 
+  /**
+   * Takes the boat's status from where it is now, as the status of the tick before: a boat met mid-ride (a fresh
+   * BoatState starts IN_AIR) would otherwise "enter" the water it already floats on.
+   */
+  settleStatus(simCtx: EPhysicsCtx, world: PhysicsWorld): void {
+    const state = simCtx.state;
+    if (!(state instanceof BoatState)) return;
+    state.status = state.previousStatus = this.getStatus(simCtx, state, world, simCtx.boat ?? this.boatSettings);
+  }
+
   simulate(simCtx: EPhysicsCtx, world: PhysicsWorld): IEntityState {
     if (!(simCtx.state instanceof BoatState)) {
       return super.simulate(simCtx, world);
