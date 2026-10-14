@@ -637,7 +637,8 @@ export class BotcraftPhysics implements IPhysics {
       // normalize and scale
       push.normalize().scale(0.0045000000000000005);
     }
-    player.vel.add(push);
+    // Entity.updateFluidHeightAndDoFluidPushing adds the current only when there is one (a -0 motion stays)
+    if (push.norm() > 0.0) player.vel.add(push);
   }
 
   /**
