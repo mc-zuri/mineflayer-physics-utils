@@ -565,7 +565,7 @@ export class BotcraftPhysics implements IPhysics {
   getFlow(block: Block, world: World) {
     if (!this.verLessThan("1.13")) return this.getFlowModern(block, world);
     const curlevel = this.getRenderedDepth(block);
-    const flow = new Vec3(0, 0, 0);
+    let flow = new Vec3(0, 0, 0);
     for (const [dx, dz] of [
       [0, 1],
       [-1, 0],
@@ -603,13 +603,13 @@ export class BotcraftPhysics implements IPhysics {
         const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
         const adjUpBlock = world.getBlock(block.position.offset(dx, 1, dz));
         if ((adjBlock && adjBlock.boundingBox !== "empty") || (adjUpBlock && adjUpBlock.boundingBox !== "empty")) {
-          flow.normalize().translate(0, -6, 0);
+          flow = this.normalizeVec(flow).translate(0, -6, 0); // Vec3d.normalize: float square root
           break;
         }
       }
     }
 
-    return flow.normalize();
+    return this.normalizeVec(flow);
   }
 
   /**
