@@ -60,4 +60,6 @@ export interface NearbyEntity {
   living: boolean;
   position: Vec3;
   boundingBox: AABB;
+  /** It ticks before the local player (the client's entity order, 1.14 - 1.16), so its push comes before the player's tick. */
+  ticksBeforePlayer?: boolean;
 }

@@ -41,6 +41,22 @@ describe("Botcraft entity push", () => {
     });
   }
 
+  // 1.14 - 1.16 tick the client's entities in their hash map's order: the cow (id 13) comes before the player (id 1),
+  // so on the first tick its push moves the player in the same tick (n_pushed_by_cow on 1.15.2, tick 1).
+  it("is pushed before its own tick by a cow the client ticks first (1.15.2, n_pushed_by_cow)", () => {
+    const version = "1.15.2";
+    const rig = createBotcraftPlayerRig({ version, position: new Vec3(0.5, 101, 38.5) });
+    rig.playerState.vel.set(0, 0, 0);
+    rig.playerState.onGround = true;
+    rig.playerState.yawDegrees = 270;
+    rig.playerState.nearbyEntities = [{ ...cow, ticksBeforePlayer: true }];
+
+    rig.physics.simulate(rig.playerCtx, createFlatWorld(version, 101) as any);
+
+    expect(rig.playerState.pos.x).toBe(0.4683772227145383);
+    expect(rig.playerState.vel.x).toBe(-0.017266038403357803);
+  });
+
   it("is not pushed by an entity that is not a LivingEntity, such as an item", () => {
     const item = { ...cow, name: "item", living: false };
     const alone = tickBesideCow("1.21.11", 0.4683772229271001, -0.061625730611736124, []);

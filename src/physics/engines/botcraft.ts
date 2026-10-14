@@ -400,6 +400,8 @@ export class BotcraftPhysics implements IPhysics {
     if (playerFlag && entity instanceof PlayerState && entity.fireworkRocketsBeforePlayer > 0) {
       this.applyFireworkBoost(entity, entity.fireworkRocketsBeforePlayer);
     }
+    // and so do the mobs and boats it ticks before the player
+    if (playerFlag && entity instanceof PlayerState) this.pushByNearbyEntities(entity, true);
 
     // Player.tick: a spectator is never on the ground (it moves without physics)
     if (playerFlag && entity instanceof PlayerState && entity.gameMode === "spectator") entity.onGround = false;
@@ -422,7 +424,7 @@ export class BotcraftPhysics implements IPhysics {
     // originally: https://github.com/adepierre/Botcraft/blob/6c572071b0237c27a85211a246ce10565ef4d80f/botcraft/src/Game/Physics/PhysicsManager.cpp#L325
     if (playerFlag) {
       this.localPlayerAIStep(ctx, world);
-      this.pushByNearbyEntities(ctx.state as PlayerState);
+      this.pushByNearbyEntities(ctx.state as PlayerState, false);
     }
   }
 
@@ -430,12 +432,14 @@ export class BotcraftPhysics implements IPhysics {
    * The other entities tick after the local player and push it (1.9+; on the client they push only the local player,
    * EntitySelector.pushableBy): a mob whose box meets the player's (LivingEntity.pushEntities), a boat whose box grown
    * by 0.2, -0.01, 0.2 meets it while the player's feet are not above the boat's (Boat.tick, Boat.push). The player,
-   * if pushable (alive, not a spectator, not on a climbable), gets Entity.push away from the other's centre.
+   * if pushable (alive, not a spectator, not on a climbable), gets Entity.push away from the other's centre. Those the
+   * client ticks before the player (ticksBeforePlayer, 1.14 - 1.16) push it before its tick.
    */
-  private pushByNearbyEntities(player: PlayerState) {
+  private pushByNearbyEntities(player: PlayerState, beforePlayer: boolean) {
     if (this.verLessThan("1.9") || player.gameMode === "spectator" || player.onClimbable) return;
     const box = player.getBB();
     for (const other of player.nearbyEntities) {
+      if (!!other.ticksBeforePlayer !== beforePlayer) continue;
       const { minX, minY, minZ, maxX, maxY, maxZ } = other.boundingBox;
       if (isBoatName(other.name)) {
         const reach = new AABB(minX, minY, minZ, maxX, maxY, maxZ).expand(0.20000000298023224, -0.009999999776482582, 0.20000000298023224);
