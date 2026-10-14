@@ -126,7 +126,7 @@ export class BotcraftPhysics implements IPhysics {
   /** The blocks whose shapes vanilla moves by a per-column offset (OffsetType.XZ), with their maximum offset. */
   protected offsetBlocks: Map<number, number>;
   /** The player simulated, whose collision context shapes the blocks it collides with (EntityCollisionContext). */
-  private collider: PlayerState | null = null;
+  protected collider: PlayerState | null = null;
   protected bubblecolumnId: number;
   protected airId: number;
   protected waterLike: Set<number>;
@@ -351,7 +351,7 @@ export class BotcraftPhysics implements IPhysics {
     return this.data.version[">"](ver);
   }
 
-  private verLessThan(ver: string) {
+  protected verLessThan(ver: string) {
     return this.data.version["<"](ver);
   }
 
@@ -513,7 +513,7 @@ export class BotcraftPhysics implements IPhysics {
     }
   }
 
-  private fluidPhysics(ctx: EPhysicsCtx, world: World, water: boolean) {
+  protected fluidPhysics(ctx: EPhysicsCtx, world: World, water: boolean) {
     const player = ctx.state as PlayerState;
     const aabb = getCollider(player.pose, player.pos, player.scale).expand(-1e-3, -1e-3, -1e-3); // -0.001
     if (water) {
@@ -1727,7 +1727,7 @@ export class BotcraftPhysics implements IPhysics {
    * LivingEntity.getFrictionInfluencedSpeed, speed * (0.21600002F / (f * f * f)). Before, travel scaled the friction
    * by 0.91F first: speed * (0.16277136F / (s * s * s)), the constant 0.16277137F in 1.13.
    */
-  private getFrictionInfluencedSpeed(movementSpeed: number, friction: number) {
+  protected getFrictionInfluencedSpeed(movementSpeed: number, friction: number) {
     const f32 = Math.fround;
     if (this.verLessThan("1.14")) {
       const s = f32(f32(friction) * f32(0.91));
@@ -1747,7 +1747,7 @@ export class BotcraftPhysics implements IPhysics {
     return sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
   }
 
-  private getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
+  protected getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
     if (entity.supportingBlockPos != null) {
       return entity.supportingBlockPos //.offset(0, -0.500001, 0);
     } else {

@@ -283,7 +283,11 @@ export class PlayerState implements IEntityState {
         return this.onGround && !this.supportingBlockPos;
     }
 
+    /** The entity's own size when it is not a player (a ridden mob: its EntityType dimensions), in float. */
+    public dimensions?: { width: number; height: number };
+
     public get height(): number {
+        if (this.dimensions) return this.dimensions.height;
         return playerPoseSize(this.pose, this.scale).height;
     }
 
@@ -310,6 +314,7 @@ export class PlayerState implements IEntityState {
     }
 
     public get halfWidth(): number {
+        if (this.dimensions) return this.dimensions.width / 2;
         return playerPoseSize(this.pose, this.scale).width / 2;
     }
 
