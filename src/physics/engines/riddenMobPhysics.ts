@@ -3,7 +3,8 @@ import { world } from "prismarine-world";
 import { Vec3 } from "vec3";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { RiddenMobState } from "../states/riddenMobState";
+import { HORSE_TYPES, RiddenMobState } from "../states/riddenMobState";
+import { floatRadians } from "../../util/mth";
 import { BotcraftPhysics } from "./botcraft";
 
 type World = { getBlock: world.WorldSync["getBlock"] };
@@ -75,6 +76,13 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     const airSpeed = Math.fround((this.verLessThan("1.19.4") ? speedBefore : mob.riddenSpeed) * Math.fround(0.1));
     this.travelRiddenMob(ctx, world, airSpeed);
 
+    // AbstractHorse.travel before 1.19.4: once on the ground after the move, a pending jump is dropped and the jump
+    // ends
+    if (HORSE_TYPES.has(mob.type) && this.verLessThan("1.19.4") && mob.onGround) {
+      mob.jumpPendingScale = 0;
+      mob.horseJumping = false;
+    }
+
     // Camel.tick, after the move: the dash ends on landing, its cooldown runs down
     if (mob.type === "camel") {
       if (mob.dashing && mob.dashCooldown < 50 && (mob.onGround || mob.isInWater || mob.isInLava)) mob.dashing = false;
@@ -129,6 +137,55 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       case "camel":
         this.tickRiddenCamel(mob, rider);
         return;
+    }
+    if (HORSE_TYPES.has(mob.type)) this.tickRiddenHorse(mob, rider);
+  }
+
+  /**
+   * A saddled horse's part of its ridden travel: the input it takes from its rider (xxa * 0.5F, zza, a quarter of it
+   * backwards; none while it rears on the ground, unless the rider's jump let it), its rotation (the rider's yaw, half
+   * its pitch), the jump the rider charged when it stands on the ground, and its speed (MOVEMENT_SPEED). Before 1.19.4
+   * all of it is AbstractHorse.travel, since tickRidden, getRiddenInput and getRiddenSpeed.
+   */
+  private tickRiddenHorse(mob: RiddenMobState, rider: RiderInput) {
+    const f32 = Math.fround;
+    const xxa = f32(f32(rider.xxa ?? 0) * f32(0.5));
+    let zza = f32(rider.zza ?? 0);
+    if (zza <= 0) zza = f32(zza * f32(0.25));
+    const rearing = mob.onGround && mob.jumpPendingScale === 0 && mob.standing && !mob.allowStandSliding;
+    mob.heading = rearing ? { forward: 0, strafe: 0 } : { forward: zza, strafe: xxa };
+    mob.yawDegrees = f32(f32(rider.yawDegrees) % 360);
+    mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
+    mob.pitch = -mob.pitchDegrees * (Math.PI / 180);
+    if (this.verLessThan("1.19.4")) {
+      if (mob.jumpPendingScale > 0 && !mob.horseJumping && mob.onGround) {
+        this.horseJump(mob, mob.jumpPendingScale, zza);
+        mob.jumpPendingScale = 0;
+      }
+    } else if (mob.onGround) {
+      mob.horseJumping = false;
+      if (mob.jumpPendingScale > 0 && !mob.horseJumping) this.horseJump(mob, mob.jumpPendingScale, zza);
+      mob.jumpPendingScale = 0;
+    }
+    mob.riddenSpeed = f32(mob.movementSpeed);
+  }
+
+  /**
+   * The rider's jump (AbstractHorse.executeRidersJump, in travel before 1.19.4): up by JUMP_STRENGTH * the charge (times
+   * the block's jump factor from 1.15; in float from 1.20.5, LivingEntity.getJumpPower) and, moving forward, 0.4F * the
+   * charge along its yaw.
+   */
+  private horseJump(mob: RiddenMobState, scale: number, forward: number) {
+    const f32 = Math.fround;
+    const blockJumpFactor = this.verLessThan("1.15") ? 1 : this.getBlockJumpFactor(mob, this.colliderWorld!, this.colliderCtx!.worldSettings);
+    if (this.verLessThan("1.15")) mob.vel.y = mob.jumpStrength * scale;
+    else if (this.verLessThan("1.20.5")) mob.vel.y = mob.jumpStrength * scale * blockJumpFactor;
+    else mob.vel.y = f32(f32(f32(mob.jumpStrength) * scale) * f32(blockJumpFactor));
+    mob.horseJumping = true;
+    if (forward > 0) {
+      const yaw = floatRadians(mob.yawDegrees ?? 0);
+      mob.vel.x += f32(f32(f32(-0.4) * this.mth.sin(yaw)) * scale);
+      mob.vel.z += f32(f32(f32(0.4) * this.mth.cos(yaw)) * scale);
     }
   }
 
@@ -192,6 +249,14 @@ export class RiddenMobPhysics extends BotcraftPhysics {
    * dash, saddled on the ground with its cooldown run out, dashes at its next tick (getPlayerJumpPendingScale).
    */
   riderJump(mob: RiddenMobState, power: number) {
+    if (HORSE_TYPES.has(mob.type)) {
+      // AbstractHorse.onPlayerJump: a charge lets a rearing horse move, and jumps at its next tick on the ground
+      const f32 = Math.fround;
+      if (power >= 0) mob.allowStandSliding = true;
+      const percent = Math.max(0, power);
+      mob.jumpPendingScale = percent >= 90 ? 1 : f32(f32(0.4) + f32(f32(f32(0.4) * percent) / f32(90)));
+      return;
+    }
     if (mob.type !== "camel" || mob.dashCooldown > 0 || !mob.onGround) return;
     const f32 = Math.fround;
     const percent = Math.max(0, power);
