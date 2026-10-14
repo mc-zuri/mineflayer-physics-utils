@@ -7,8 +7,8 @@ import { createBotcraftPlayerRig } from "../../helpers/unit/botcraftTestSupport"
 // from the position and the float dimensions. The boxes are the vanilla client's in the recorder's "n_pushed_by_cow"
 // (a cow at 0.9, 101, 38.5) and "n_walk_into_boat" (an oak boat at 3.5, 101, 38.5) on 1.21.11.
 describe("PlayerState nearby entities", () => {
-  function stateWith(entities: object[]) {
-    const rig = createBotcraftPlayerRig({ version: "1.21.11", position: new Vec3(0.5, 101, 38.5) });
+  function stateWith(entities: object[], version = "1.21.11") {
+    const rig = createBotcraftPlayerRig({ version, position: new Vec3(0.5, 101, 38.5) });
     rig.fakePlayer.entity.id = 1;
     rig.fakePlayer.entities = Object.fromEntries([rig.fakePlayer.entity, ...entities].map((e: any) => [e.id, e]));
     rig.playerState.update(rig.fakePlayer);
@@ -54,6 +54,20 @@ describe("PlayerState nearby entities", () => {
     const [boat] = state.nearbyEntities;
     expect(boat.position.x).toBe(3.510009765625);
     expect(boat.boundingBox.toArray()).toEqual([2.822509765625, 101, 37.8125, 4.197509765625, 101.5625, 39.1875]);
+  });
+
+  // 1.14 - 1.16 tick the client's entities from the last slot of an Int2ObjectOpenHashMap down (32 slots, the player
+  // then the others in id order, linear probing): "n_pushed_by_cow" on 1.15.2 (the cow, id 13, ticks before the player,
+  // id 1) and "n_sprint_into_cows" on 1.14.4 (the cows 20, 21, 22 tick after it, 22 first). Since 1.17 they tick in
+  // the order they were added, after the player.
+  it("orders the entities as the 1.14 - 1.16 client ticks them, marking those before the player", () => {
+    const cow = (id: number, x: number) => ({ id, name: "cow", position: new Vec3(x, 101, 38.5), width: 0.9, height: 1.4 });
+    const ticks = (state: { nearbyEntities: { position: Vec3; ticksBeforePlayer?: boolean }[] }) =>
+      state.nearbyEntities.map((e) => [e.position.x, !!e.ticksBeforePlayer]);
+
+    expect(ticks(stateWith([cow(13, 0.9)], "1.15.2"))).toEqual([[0.9, true]]);
+    expect(ticks(stateWith([cow(20, 3.5), cow(21, 4.5), cow(22, 5.5)], "1.14.4"))).toEqual([[5.5, false], [4.5, false], [3.5, false]]);
+    expect(ticks(stateWith([cow(13, 0.9)], "1.17.1"))).toEqual([[0.9, false]]);
   });
 
   it("leaves out the player itself and entities farther than 16 blocks", () => {

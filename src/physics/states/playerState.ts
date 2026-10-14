@@ -32,13 +32,39 @@ const NOT_LIVING_TYPES = new Set(["object", "orb", "global", "other", "projectil
 const snakeCase = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase();
 
 /**
+ * The slots of the client's entities on 1.14 - 1.16, which tick them from the last slot of an Int2ObjectOpenHashMap
+ * down (MultiPlayerLevel.entitiesById, fastutil: 32 slots for a few entities, linear probing, the player then the others
+ * in id order); null on the other versions, which tick them in the order they were added, the player first.
+ */
+function entitySlots(bot: Bot): Map<number, number> | null {
+    const version = bot.registry?.version;
+    if (!version || version["<"]("1.14") || version[">="]("1.17")) return null;
+    const ids = Object.values(bot.entities ?? {}).map((e) => e.id).filter((id) => id !== bot.entity.id).sort((a, b) => a - b);
+    let size = 32;
+    while (ids.length + 1 >= size * 0.75) size *= 2;
+    const slots = new Map<number, number>();
+    const taken = new Set<number>();
+    for (const id of [bot.entity.id, ...ids]) {
+        const h = Math.imul(id, 0x9e3779b9 | 0);
+        let slot = (h ^ (h >>> 16)) & (size - 1);
+        while (taken.has(slot)) slot = (slot + 1) & (size - 1);
+        taken.add(slot);
+        slots.set(id, slot);
+    }
+    return slots;
+}
+
+/**
  * The bot's other entities within 16 blocks, as the engine takes them: where the client shows them (mineflayer's
  * interpolatedPosition, the server's position when it has none), the box from it and the float dimensions
- * (EntityDimensions.makeBoundingBox); not living when mineflayer spawned it as no mob, or by its name.
+ * (EntityDimensions.makeBoundingBox); not living when mineflayer spawned it as no mob, or by its name. On 1.14 - 1.16
+ * they come in the client's tick order, those it ticks before the player marked.
  */
 function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
     const self = bot.entity;
-    const out: NearbyEntity[] = [];
+    const slots = entitySlots(bot);
+    const slotOf = (id: number) => slots?.get(id) ?? -1;
+    const out: [number, NearbyEntity][] = [];
     for (const other of Object.values(bot.entities ?? {})) {
         if (other === self || other.id === self.id || !other.name || other.width == null || other.height == null) continue;
         const shown = (other as { interpolatedPosition?: Vec3 }).interpolatedPosition ?? other.position;
@@ -47,14 +73,16 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
         const name = snakeCase(other.name);
         const halfWidth = Math.fround(Math.fround(other.width) / 2);
         const height = Math.fround(other.height);
-        out.push({
+        out.push([slotOf(other.id), {
             name,
             living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
             position: shown.clone(),
             boundingBox: new AABB(x - halfWidth, y, z - halfWidth, x + halfWidth, y + height, z + halfWidth),
-        });
+            ticksBeforePlayer: slots != null && slotOf(other.id) > slotOf(self.id),
+        }]);
     }
-    return out;
+    if (slots != null) out.sort((a, b) => b[0] - a[0]);
+    return out.map(([, entity]) => entity);
 }
 
 
