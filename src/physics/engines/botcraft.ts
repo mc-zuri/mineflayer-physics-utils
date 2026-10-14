@@ -2520,11 +2520,13 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.z = 0.0;
       }
       if (collisionY) {
+        // Block.updateEntityAfterFallOn stops the vertical motion: 0 before 1.14, then times 0 (a fall keeps its -0)
+        const stopped = this.verLessThan("1.14") ? 0.0 : player.vel.y * 0.0;
         if (player.control.sneak) {
-          player.vel.y = 0.0;
+          player.vel.y = stopped;
         } else {
           const blockBelow = world.getBlock(this.getOnPosLegacy(player, world));
-          let newSpeed = 0.0;
+          let newSpeed = stopped;
           if (blockBelow != null) {
             if (this.slimeBlockId === blockBelow.type) {
               newSpeed = -player.vel.y;
