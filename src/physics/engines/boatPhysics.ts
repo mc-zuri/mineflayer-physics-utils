@@ -82,6 +82,7 @@ export class BoatPhysics extends EntityPhysics {
     }
 
     if (legacy) {
+      state.box = bb;
       state.pos.x = (bb.minX + bb.maxX) / 2;
       state.pos.y = bb.minY;
       state.pos.z = (bb.minZ + bb.maxZ) / 2;
@@ -107,7 +108,9 @@ export class BoatPhysics extends EntityPhysics {
     if (state.isCollidedVertically) state.vel.y = 0;
   }
 
+  /** The boat's box: before 1.14 the entity's own (moved box by box, the position follows it), else around the position. */
   private getBoatBB(simCtx: EPhysicsCtx, state: BoatState): AABB {
+    if (state.box && this.data.version["<"]("1.14")) return state.box.clone();
     return this.getEntityBB(simCtx, state.pos);
   }
 
@@ -396,6 +399,7 @@ export class BoatPhysics extends EntityPhysics {
       const fits = !this.getSurroundingBBs(targetBB, world).some((solidBB) => this.hasSolidCollision(targetBB, solidBB));
       if (!guarded || fits) {
         state.pos.y = targetY;
+        state.box = undefined; // (setPosition: the box around the new position)
         state.vel.y = 0;
         state.lastVerticalVelocity = 0;
       }

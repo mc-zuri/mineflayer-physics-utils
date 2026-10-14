@@ -1,5 +1,6 @@
 import { describe, it } from "mocha";
 import expect from "expect";
+import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import { Vec3 } from "vec3";
 import { BoatStatus } from "../../../src/physics/states/boatState";
 import { createBoatRig, fillWaterColumn, simulateBoatTick } from "../../helpers/unit/botcraftTestSupport";
@@ -68,4 +69,25 @@ describe("Boat move against the shore", () => {
       expect(rig.boatState.pos.y).toBe(nextY);
     });
   }
+});
+
+// v_boat_forward tick 5 on 1.12.2: before 1.14 the boat keeps its own box, which the move shifts; the position is
+// taken from the shifted box, so it can differ from the box rebuilt around the position in the last bit.
+describe("Boat move with its own box (before 1.14)", () => {
+  it("moves the boat's own box and places the boat from it (1.12.2, v_boat_forward tick 5)", () => {
+    const rig = boatOnPool("1.12.2", 100.52326049837288, -3.331152744270871e-9);
+    const state = rig.boatState;
+    state.pos.x = 0.7243999913603067;
+    state.vel = new Vec3(0.10839999490678319, -3.331152744270871e-9, 0);
+    state.box = new AABB(0.03689999136030685, 100.52326049837288, 2124.8125, 1.4118999913603067, 101.08576049837288, 2126.1875);
+    state.setYawDegrees(270);
+    state.control.forward = true;
+
+    simulateBoatTick(rig);
+
+    expect(state.vel.x).toBe(0.13755999193757792);
+    expect(state.pos.x).toBe(0.8619599832978847);
+    expect(state.box!.minX).toBe(0.17445998329788476);
+    expect(state.box!.maxX).toBe(1.5494599832978846);
+  });
 });

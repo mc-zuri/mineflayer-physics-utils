@@ -1,4 +1,5 @@
 import type { Entity } from "prismarine-entity";
+import { AABB } from "@nxg-org/mineflayer-util-plugin";
 import { Vec3 } from "vec3";
 import type { IPhysics } from "../engines";
 import { resolveBoatDimensions } from "../settings/boatSettings";
@@ -23,6 +24,8 @@ export class BoatState extends EntityState {
   yawVelocity = 0;
   /** The yaw as vanilla holds it (Entity.yRot): float degrees, whole turns kept. */
   yawDegrees: number;
+  /** Before 1.14 the entity's own box, which moves and places the boat (unset: the box around the position). */
+  box?: AABB;
   lastVerticalVelocity = 0;
   controllingPlayer = false;
 
@@ -89,6 +92,7 @@ export class BoatState extends EntityState {
 
   public rebaseFromEntity(entity: Entity, options?: { replaceVelocity?: boolean }): BoatState {
     this.pos.set(entity.position.x, entity.position.y, entity.position.z);
+    this.box = undefined;
     if (options?.replaceVelocity !== false) {
       this.vel.set(entity.velocity.x, entity.velocity.y, entity.velocity.z);
     }
@@ -138,6 +142,7 @@ export class BoatState extends EntityState {
     other.landFriction = this.landFriction;
     other.yawVelocity = this.yawVelocity;
     other.yawDegrees = this.yawDegrees;
+    other.box = this.box?.clone();
     other.lastVerticalVelocity = this.lastVerticalVelocity;
     other.controllingPlayer = this.controllingPlayer;
     other.worldReady = this.worldReady;
