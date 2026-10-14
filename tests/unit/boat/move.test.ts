@@ -91,3 +91,35 @@ describe("Boat move with its own box (before 1.14)", () => {
     expect(state.box!.maxX).toBe(1.5494599832978846);
   });
 });
+
+// v_boat_onto_land tick 24: the boat runs into the shore wall with a tiny sinking motion. From 1.13 a motion under
+// 1.0E-7 that meets a shape stays (VoxelShapes.calculateMaxOffset), so 1.13.2 lands on the spot; 1.12.2 still sinks.
+const intoTheShore = [
+  { version: "1.12.2", nextY: 100.52326049849721, nextVelY: -1.721213276073552e-10, onGround: false },
+  { version: "1.13.2", nextY: 100.52326049866933, nextVelY: 0, onGround: true },
+];
+
+describe("Boat move into the shore", () => {
+  for (const { version, nextY, nextVelY, onGround } of intoTheShore) {
+    it(`keeps or drops a tiny motion meeting a block (${version}, v_boat_onto_land tick 24)`, () => {
+      const rig = createBoatRig({ version, position: new Vec3(24.054516729478955, 100.52326049866933, 2125.5), floorY: 99 });
+      for (let z = 2123; z <= 2128; z++) {
+        for (let x = 21; x <= 24; x++) fillWaterColumn(rig.world, x, z, 99, 100);
+        for (let x = 25; x <= 27; x++) rig.world.setStone(new Vec3(x, 100, z));
+      }
+      const state = rig.boatState;
+      state.vel = new Vec3(0.3606090928335157, -1.6139742667342638e-10, 0);
+      state.box = new AABB(23.367016729478955, 100.52326049866933, 2124.8125, 24.742016729478955, 101.08576049866933, 2126.1875);
+      state.status = state.previousStatus = BoatStatus.IN_WATER;
+      state.setYawDegrees(270);
+      state.control.forward = true;
+
+      simulateBoatTick(rig);
+
+      expect(state.pos.x).toBe(24.3125);
+      expect(state.pos.y).toBe(nextY);
+      expect(state.vel.y).toBe(nextVelY);
+      expect(state.onGround).toBe(onGround);
+    });
+  }
+});

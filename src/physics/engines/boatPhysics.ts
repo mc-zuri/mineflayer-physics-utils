@@ -50,7 +50,7 @@ export class BoatPhysics extends EntityPhysics {
 
   /**
    * Entity.move for the boat (no step): the motion collided with the blocks, y first, then x and z (from 1.14 the
-   * larger of the two first, and an axis under 1.0E-7 that meets a block does not move). Before 1.14 the position
+   * larger of the two first; from 1.13 an axis under 1.0E-7 that meets a block stays). Before 1.14 the position
    * is the moved box's (centre x / z, bottom y); 1.14 - 1.21.1 move only by more than 1.0E-7 squared, 1.21.2+ also
    * when nothing blocked the motion. A blocked horizontal axis stops (1.14+ beyond Mth.equal's 1.0E-5F), and a
    * blocked vertical motion lands.
@@ -63,10 +63,15 @@ export class BoatPhysics extends EntityPhysics {
     const swept = bb.clone().extend(want.x, want.y, want.z);
     const nearby = this.getSurroundingBBs(swept, world);
     const colliders = this.data.version["<"]("1.18") ? nearby : nearby.filter((block) => block.intersects(swept));
+    const epsilon = !this.data.version["<"]("1.13");
     const along = (axis: "x" | "y" | "z", d: number) => {
       if (d === 0) return 0;
-      if (colliders.length > 0 && !legacy && Math.abs(d) < 1.0e-7) return 0;
       for (const block of colliders) {
+        // (VoxelShapes.calculateMaxOffset / Shapes.collide, 1.13+: a motion under 1.0E-7 meeting a shape stays)
+        if (epsilon && Math.abs(d) < 1.0e-7) {
+          d = 0;
+          break;
+        }
         d = axis === "x" ? block.computeOffsetX(bb, d) : axis === "y" ? block.computeOffsetY(bb, d) : block.computeOffsetZ(bb, d);
       }
       bb.translate(axis === "x" ? d : 0, axis === "y" ? d : 0, axis === "z" ? d : 0);
