@@ -636,6 +636,15 @@ export class BotcraftPhysics implements IPhysics {
     player.vel.add(push);
   }
 
+  /**
+   * LivingEntity.checkFallDamage: a player not in water looks at the fluids again where the move ended. Water alone
+   * (updateInWaterStateAndDoWaterCurrentPushing) until 26.1 made it the whole updateFluidInteraction, lava included.
+   */
+  protected fluidsAfterMove(ctx: EPhysicsCtx, world: World) {
+    this.fluidPhysics(ctx, world, true);
+    if (!this.verLessThan("26.1")) this.fluidPhysics(ctx, world, false);
+  }
+
   getFlow(block: Block, world: World) {
     if (!this.verLessThan("1.13")) return this.getFlowModern(block, world);
     const curlevel = this.getRenderedDepth(block);
@@ -2292,7 +2301,7 @@ export class BotcraftPhysics implements IPhysics {
       } else {
         player.pos.translate(player.vel.x, player.vel.y, player.vel.z);
       }
-      if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
+      if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidsAfterMove(ctx, world);
       return;
     }
 
@@ -2529,7 +2538,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // Vanilla refreshes water contact here, before travel applies friction, except in 1.21.4.
     // https://github.com/GrimAnticheat/Grim/blob/2fe3b3e5ab9bd4ea692d712712645cf38209378b/common/src/main/java/ac/grim/grimac/predictionengine/movementtick/MovementTicker.java#L172-L184
-    if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidPhysics(ctx, world, true);
+    if (!player.isInWater && this.data.version.minecraftVersion !== "1.21.4") this.fluidsAfterMove(ctx, world);
 
     // Rough fix for now: ignore this if we are flying. (Entity.move until 1.21.2 moved it after the whole travel)
     if (!player.flying && this.verLessThan("1.21.2")) {

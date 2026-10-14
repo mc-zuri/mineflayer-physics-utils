@@ -21,6 +21,14 @@ const CASES = [
     tick10: { x: 2.7326571993314204, vx: 0.11564493175397741 },
     tick52: { x: 11.15932996664043, vx: 0.054594078687730016 },
   },
+  // 26.1 looks at lava again after the move (LivingEntity.checkFallDamage), but not for a strider already in lava
+  // (Strider.checkFallDamage): stepping onto the stone at tick 47 it still floats up out of the lava it starts in
+  {
+    version: "26.1",
+    start: { pos: [0.8364921539914629, 100.5, 1937.5], vel: [0.08839569507498411, -0.0784000015258789, 0] },
+    tick10: { x: 2.896416801948984, vx: 0.1156900116994773 },
+    tick52: { x: 11.323188864305992, vx: 0.054594078687730356 },
+  },
 ] as const;
 
 function lavaPool(version: string, lavaType: number) {

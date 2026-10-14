@@ -373,6 +373,13 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     return super.collisionShapes(block, pos);
   }
 
+  /** Strider.checkFallDamage: a strider in lava skips LivingEntity.checkFallDamage and its look at the fluids. */
+  protected fluidsAfterMove(ctx: EPhysicsCtx, world: World) {
+    const mob = ctx.state;
+    if (mob instanceof RiddenMobState && mob.type === "strider" && mob.isInLava) return;
+    super.fluidsAfterMove(ctx, world);
+  }
+
   /** ItemBasedSteering.tickBoost: the boost ends once its time has run out. */
   protected tickBoost(mob: RiddenMobState) {
     if (mob.boosting && mob.boostTime++ > mob.boostTimeTotal) mob.boosting = false;
