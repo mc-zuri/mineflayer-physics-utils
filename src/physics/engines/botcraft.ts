@@ -2478,6 +2478,9 @@ export class BotcraftPhysics implements IPhysics {
       if (player.onGround) player.fallDistance = 0;
     }
 
+    // Entity.move (1.17+) stops here for an entity removed during its tick: no velocity reset, landing, block effects
+    if (player.removed && !this.verLessThan("1.17")) return;
+
     // update speeds
     if (resetX) {
       player.vel.x = 0.0;

@@ -174,6 +174,8 @@ export class PlayerState implements IEntityState {
     public fireworkRockets: number = 0;
     /** How many of those the client ticks before the player (its entity list order), boosting before its tick. */
     public fireworkRocketsBeforePlayer: number = 0;
+    /** Removed during this tick before its move (LocalPlayer.tickDeath at the 20th tick of its death); input only. */
+    public removed: boolean = false;
     public isCollidedHorizontally: boolean = false;
     public isCollidedHorizontallyMinor: boolean = false;
     public isCollidedVertically: boolean = false;
@@ -370,6 +372,7 @@ export class PlayerState implements IEntityState {
         this.fallDistance = (bot.entity as any).fallDistance ?? 0;
         this.isInPowderSnow = (bot.entity as { isInPowderSnow?: boolean }).isInPowderSnow ?? false;
         this.onGround = bot.entity.onGround;
+        this.removed = false;
         this.lastOnGround = (bot.entity as any).lastOnGround ?? bot.entity.onGround;
         this.onClimbable = (bot.entity as any).onClimbable;
         this.isInWater = (bot.entity as any).isInWater;
@@ -533,6 +536,7 @@ export class PlayerState implements IEntityState {
         tmp.pos.set(this.pos.x, this.pos.y, this.pos.z);
         tmp.vel.set(this.vel.x, this.vel.y, this.vel.z);
         tmp.onGround = this.onGround;
+        tmp.removed = this.removed;
         tmp.lastOnGround = this.lastOnGround;
         tmp.onClimbable = this.onClimbable;
         tmp.isInWater = this.isInWater;
