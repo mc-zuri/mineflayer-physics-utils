@@ -32,15 +32,17 @@ const NOT_LIVING_TYPES = new Set(["object", "orb", "global", "other", "projectil
 const snakeCase = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase();
 
 /**
- * The bot's other entities within 16 blocks, as the engine takes them: the box from the position and the float
- * dimensions (EntityDimensions.makeBoundingBox); not living when mineflayer spawned it as no mob, or by its name.
+ * The bot's other entities within 16 blocks, as the engine takes them: where the client shows them (mineflayer's
+ * interpolatedPosition, the server's position when it has none), the box from it and the float dimensions
+ * (EntityDimensions.makeBoundingBox); not living when mineflayer spawned it as no mob, or by its name.
  */
 function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
     const self = bot.entity;
     const out: NearbyEntity[] = [];
     for (const other of Object.values(bot.entities ?? {})) {
         if (other === self || other.id === self.id || !other.name || other.width == null || other.height == null) continue;
-        const { x, y, z } = other.position;
+        const shown = (other as { interpolatedPosition?: Vec3 }).interpolatedPosition ?? other.position;
+        const { x, y, z } = shown;
         if (Math.max(Math.abs(x - self.position.x), Math.abs(y - self.position.y), Math.abs(z - self.position.z)) > 16) continue;
         const name = snakeCase(other.name);
         const halfWidth = Math.fround(Math.fround(other.width) / 2);
@@ -48,7 +50,7 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
         out.push({
             name,
             living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
-            position: other.position.clone(),
+            position: shown.clone(),
             boundingBox: new AABB(x - halfWidth, y, z - halfWidth, x + halfWidth, y + height, z + halfWidth),
         });
     }

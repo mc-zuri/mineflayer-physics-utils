@@ -43,6 +43,19 @@ describe("PlayerState nearby entities", () => {
     expect(byName).toEqual({ fishing_hook: false, boat: false, mushroom_cow: true, item: false });
   });
 
+  // n_walk_into_boat on 1.21.11, tick 13: the server moved the boat to x 3.530029296875 and the client shows it a third
+  // of the way there (mineflayer's interpolatedPosition); the box is the shown one the client recorded
+  it("builds the box where the client shows an entity, not at the server's position", () => {
+    const state = stateWith([{
+      id: 27, name: "oak_boat", width: 1.375, height: 0.5625,
+      position: new Vec3(3.530029296875, 101, 38.5), interpolatedPosition: new Vec3(3.510009765625, 101, 38.5),
+    }]);
+
+    const [boat] = state.nearbyEntities;
+    expect(boat.position.x).toBe(3.510009765625);
+    expect(boat.boundingBox.toArray()).toEqual([2.822509765625, 101, 37.8125, 4.197509765625, 101.5625, 39.1875]);
+  });
+
   it("leaves out the player itself and entities farther than 16 blocks", () => {
     const state = stateWith([{ id: 40, name: "cow", position: new Vec3(20, 101, 38.5), width: 0.9, height: 1.4 }]);
     expect(state.nearbyEntities).toEqual([]);
