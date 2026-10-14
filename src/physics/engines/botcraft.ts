@@ -111,6 +111,8 @@ export class BotcraftPhysics implements IPhysics {
   public readonly mth: Mth;
 
   protected bedId: number;
+  /** Block.getBounceRestitution (26.2+): slime 1, the colored beds and the shelf mushroom 0.75F. */
+  protected bounceRestitution: Map<number, number>;
   protected slimeBlockId: number;
   protected soulsandId: number;
   protected berryBushId: number;
@@ -165,6 +167,12 @@ export class BotcraftPhysics implements IPhysics {
     if (blocksByName.blue_ice) this.blockSlipperiness[blocksByName.blue_ice.id] = 0.989;
 
     this.bedId = blocksByName.bed?.id ?? blocksByName.white_bed?.id ?? -1;
+    this.bounceRestitution = new Map([[this.slimeBlockId, 1]]);
+    for (const block of mcData.blocksArray) {
+      if ((/_bed$/.test(block.name) && block.name !== "straw_bed") || block.name === "shelf_mushroom") {
+        this.bounceRestitution.set(block.id, Math.fround(0.75));
+      }
+    }
     this.soulsandId = blocksByName.soul_sand.id;
     this.scaffoldId = blocksByName.scaffolding?.id ?? -1; // 1.14+
     this.berryBushId = blocksByName.sweet_berry_bush?.id ?? -1; // 1.14+
@@ -1785,6 +1793,17 @@ export class BotcraftPhysics implements IPhysics {
     return attributeSpeed;
   }
 
+  /** LivingEntity.getEffectiveGravity: the gravity, at most 0.01 while falling with slow falling. */
+  private getEffectiveGravity(ctx: EPhysicsCtx, player: PlayerState): number {
+    const goingDown = player.vel.y <= 0.0;
+    const hasSlowFalling = player.slowFalling > 0;
+    if (this.verLessThan("1.20.5")) return goingDown && hasSlowFalling ? 0.01 : ctx.gravity;
+    // the gravity attribute, with its modifiers (LivingEntity.getDefaultGravity)
+    const synced = player.attributes[this.gravityAttribute];
+    const defaultGravity = synced ? this.attributeValue(this.gravityAttribute, synced) : ctx.gravity;
+    return goingDown && hasSlowFalling ? Math.min(0.01, defaultGravity) : defaultGravity;
+  }
+
   /**
    * Assume EPhysicsCtx is wrapping a PlayerState.
    * @param ctx
@@ -1795,18 +1814,7 @@ export class BotcraftPhysics implements IPhysics {
     {
       // LivingEntity::travel
       const goingDown = player.vel.y <= 0.0;
-      const hasSlowFalling = player.slowFalling > 0;
-
-      // named drag in botcraft. That seems incorrect. Not sure yet.
-      let gravity: number;
-      if (this.verLessThan("1.20.5")) {
-        gravity = goingDown && hasSlowFalling ? 0.01 : ctx.gravity;
-      } else {
-        // the gravity attribute, with its modifiers (LivingEntity.getDefaultGravity)
-        const synced = player.attributes[this.gravityAttribute];
-        const defaultGravity = synced ? this.attributeValue(this.gravityAttribute, synced) : ctx.gravity;
-        gravity = goingDown && hasSlowFalling ? Math.min(0.01, defaultGravity) : defaultGravity;
-      }
+      const gravity = this.getEffectiveGravity(ctx, player);
 
       if (player.isInWater && !player.flying) {
         const initY = player.pos.y;
@@ -2485,27 +2493,34 @@ export class BotcraftPhysics implements IPhysics {
     if (player.removed && !this.verLessThan("1.17")) return;
 
     // update speeds
-    if (resetX) {
-      player.vel.x = 0.0;
-    }
-    if (resetZ) {
-      player.vel.z = 0.0;
-    }
-    if (collisionY) {
-      if (player.control.sneak) {
-        player.vel.y = 0.0;
-      } else {
-        const blockBelow = world.getBlock(this.getOnPosLegacy(player, world));
-        let newSpeed = 0.0;
-        if (blockBelow != null) {
-          if (this.slimeBlockId === blockBelow.type) {
-            newSpeed = -player.vel.y;
-          } else if (this.bedId === blockBelow.type && !this.verLessThan("1.12")) {
-            // BedBlock.bounceUp (1.12+): only a fall bounces, keeping 0.66F of its speed
-            newSpeed = player.vel.y < 0 ? player.vel.y * -0.6600000262260437 : player.vel.y;
+    if (!this.verLessThan("26.2")) {
+      // 26.2 replaced the velocity reset and the blocks' fall-on bounce with Entity.restituteMovementAfterCollisions
+      if ((movementBeforeCollisions.y !== 0 && collisionY) || player.isCollidedHorizontally) {
+        this.restituteMovementAfterCollisions(ctx, world, collisionX, collisionZ, movement.y);
+      }
+    } else {
+      if (resetX) {
+        player.vel.x = 0.0;
+      }
+      if (resetZ) {
+        player.vel.z = 0.0;
+      }
+      if (collisionY) {
+        if (player.control.sneak) {
+          player.vel.y = 0.0;
+        } else {
+          const blockBelow = world.getBlock(this.getOnPosLegacy(player, world));
+          let newSpeed = 0.0;
+          if (blockBelow != null) {
+            if (this.slimeBlockId === blockBelow.type) {
+              newSpeed = -player.vel.y;
+            } else if (this.bedId === blockBelow.type && !this.verLessThan("1.12")) {
+              // BedBlock.bounceUp (1.12+): only a fall bounces, keeping 0.66F of its speed
+              newSpeed = player.vel.y < 0 ? player.vel.y * -0.6600000262260437 : player.vel.y;
+            }
           }
+          player.vel.y = newSpeed;
         }
-        player.vel.y = newSpeed;
       }
     }
 
@@ -2527,6 +2542,37 @@ export class BotcraftPhysics implements IPhysics {
       player.vel.x *= blockSpeedFactor;
       player.vel.z *= blockSpeedFactor;
     }
+  }
+
+  /**
+   * Entity.restituteMovementAfterCollisions (26.2+): a collided axis bounces back by the entity's restitution. Landing
+   * without sneaking from a fall at least a gravity step fast takes the block's restitution (Block.getBounceRestitution)
+   * instead, after undoing the part of the tick's gravity and air drag the move did not use. The vertical speed is
+   * that times the restitution, so 0 without a bounce (-0 rising into a ceiling, as a wall's -vx * 0).
+   */
+  private restituteMovementAfterCollisions(ctx: EPhysicsCtx, world: World, collisionX: boolean, collisionZ: boolean, movedY: number) {
+    const player = ctx.state as PlayerState;
+    const vel = player.vel;
+    let restitution = 0; // LivingEntity.getEntityBounciness: the bounciness attribute, 0 for a player
+    if (collisionX) vel.x = -vel.x * restitution;
+    if (collisionZ) vel.z = -vel.z * restitution;
+    if (!player.isCollidedVertically) return;
+    const gravity = this.getEffectiveGravity(ctx, player);
+    if (player.onGround) {
+      const tooSlow = -vel.y < gravity;
+      const block = world.getBlock(this.getOnPosLegacy(player, world));
+      const blockRestitution = block != null ? this.bounceRestitution.get(block.type) ?? 0 : 0;
+      restitution = !tooSlow && !player.control.sneak ? Math.max(restitution, blockRestitution) : 0;
+    }
+    let gravityCompensation = 0;
+    let effectiveDrag = 1;
+    if (restitution > 0) {
+      const portionWithMovement = movedY / vel.y;
+      gravityCompensation = portionWithMovement * gravity;
+      // Mth.lerp(portion, 1.0, getAirDrag())
+      effectiveDrag = 1 + portionWithMovement * (0.9800000190734863 - 1);
+    }
+    vel.y = (gravityCompensation - vel.y) * effectiveDrag * restitution;
   }
 
   /**
