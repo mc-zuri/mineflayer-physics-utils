@@ -175,6 +175,8 @@ export class PlayerState implements IEntityState {
     /** The client's auto-jump option (1.11+), and LocalPlayer.autoJumpTime: a jump is pressed for the player next tick. */
     public autoJumpEnabled: boolean = false;
     public autoJumpTime: number = 0;
+    /** The jump auto-jump presses this tick (KeyboardInput.tick's makeJump): part of the tick's input, as the client sends it. */
+    public autoJumping: boolean = false;
     public flyJumpTriggerTime: number = 0;
 
     public sneakCollision: boolean = false;
@@ -467,6 +469,7 @@ export class PlayerState implements IEntityState {
         (bot as any).flyJumpTriggerTime = this.flyJumpTriggerTime;
         (bot as any).sprintTriggerTime = this.sprintTriggerTime;
         (bot as unknown as { autoJumpTime?: number }).autoJumpTime = this.autoJumpTime;
+        (bot as unknown as { autoJumping?: boolean }).autoJumping = this.autoJumping;
 
         bot.entity.yaw = this.yaw;
         bot.entity.pitch = this.pitch;

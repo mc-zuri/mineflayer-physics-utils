@@ -947,6 +947,7 @@ export class BotcraftPhysics implements IPhysics {
     // LocalPlayer.aiStep: the jump auto-jump queued the tick before is pressed now
     const autoJumping = player.autoJumpTime > 0;
     if (autoJumping) player.autoJumpTime--;
+    player.autoJumping = autoJumping;
 
     // moved into AiStep since it's tied to player behavior. Strictly, is Player::updateSwimming.
     this.updateSwimming(player, world);

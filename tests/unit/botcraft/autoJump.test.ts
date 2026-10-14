@@ -52,5 +52,13 @@ describe("Botcraft auto-jump", () => {
     it(`does not jump with auto-jump off (${version})`, () => {
       expect(walkToStep(version, false).pos.y).toBe(groundLevel);
     });
+
+    // the queued jump is the tick's jump key (KeyboardInput.tick's makeJump): from 1.21.2 the client's player_input of
+    // tick 10 holds it, tick 11's not
+    it(`tells the bot the tick auto-jump presses jump (${version})`, () => {
+      const state = walkToStep(version, true);
+      state.apply(state.bot);
+      expect((state.bot as unknown as { autoJumping?: boolean }).autoJumping).toBe(true);
+    });
   }
 });
