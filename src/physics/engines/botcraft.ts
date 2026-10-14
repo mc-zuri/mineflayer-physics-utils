@@ -526,7 +526,9 @@ export class BotcraftPhysics implements IPhysics {
 
   protected fluidPhysics(ctx: EPhysicsCtx, world: World, water: boolean) {
     const player = ctx.state as PlayerState;
-    const aabb = getCollider(player.pose, player.pos, player.scale).expand(-1e-3, -1e-3, -1e-3); // -0.001
+    const collider = getCollider(player.pose, player.pos, player.scale);
+    const bottom = collider.minY;
+    const aabb = collider.expand(-1e-3, -1e-3, -1e-3); // -0.001
     if (water) {
       player.isInWater = false;
       if (this.verLessThan("1.13")) {
@@ -545,6 +547,8 @@ export class BotcraftPhysics implements IPhysics {
     const minAABB = aabb.minPoint();
     const maxAABB = aabb.maxPoint();
     const eyeHeight = player.eyeHeight + player.pos.y;
+    // the height above the bottom of the box deflated by 0.001, of the box itself from 26.1 (EntityFluidInteraction)
+    const heightFrom = this.verLessThan("26.1") ? minAABB.y : bottom;
 
     const waterCond = (block: Block) => block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged;
     const lavaCond = (block: Block) => block.type === this.lavaId;
@@ -593,7 +597,7 @@ export class BotcraftPhysics implements IPhysics {
             }
           }
 
-          fluidRelativeHeight = Math.max(top - minAABB.y, fluidRelativeHeight);
+          fluidRelativeHeight = Math.max(top - heightFrom, fluidRelativeHeight);
 
           if (player.flying) continue;
 
