@@ -66,6 +66,11 @@ export class RiddenMobState extends PlayerState {
   /** Camel (AbstractHorse): the JUMP_STRENGTH attribute's value, the dash the rider asked for (playerJumpPendingScale) */
   public jumpStrength = 0.41999998688697815;
   public jumpPendingScale = 0;
+  /** where a server teleport has the mob interpolate to, and the steps left (LivingEntity.lerpTo, InterpolationHandler) */
+  public lerpTarget: Vec3 | null = null;
+  public lerpSteps = 0;
+  /** InterpolationHandler (1.21.5+): where the last step left the mob, to carry its own moves into the target */
+  public lerpPrevious: Vec3 | null = null;
   /** Camel: ticks until it can dash again, and whether it dashes (DASH) */
   public dashCooldown = 0;
   public dashing = false;

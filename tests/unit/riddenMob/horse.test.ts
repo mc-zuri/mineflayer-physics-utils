@@ -86,3 +86,21 @@ describe("RiddenMobPhysics horse rearing", () => {
     });
   }
 });
+
+// m_horse on 1.21.11: the server teleports the horse its rider controls one block east (a relative /tp at tick 24);
+// the horse eases there over 3 ticks while the vehicle move reports the target (ServerboundMoveVehiclePacket.fromEntity).
+describe("RiddenMobPhysics teleport", () => {
+  it("interpolates a ridden horse to the server's teleport over 3 ticks (1.21.11, m_horse ticks 24 - 26)", () => {
+    const world = createFlatWorld("1.21.11", 101);
+    const { physics, state, ctx } = createRiddenMobRig({ version: "1.21.11", type: "horse", pos: [0.5, 101, 2839.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+    state.movementSpeed = 0.2;
+    physics.teleportRidden(state, state.pos.offset(1, 0, 0));
+    const shown: number[] = [];
+    for (let t = 0; t < 4; t++) {
+      physics.simulateRidden(ctx, world as any, { yawDegrees: 270, pitchDegrees: 0, xxa: 0, zza: 0 });
+      shown.push(state.pos.x);
+      if (t === 0) expect(physics.lerpTargetOf(state).x).toBe(1.5);
+    }
+    expect(shown).toEqual([0.8333333333333333, 1.1666666666666665, 1.5, 1.5]);
+  });
+});

@@ -61,9 +61,23 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
 
-    // LivingEntity.aiStep. Before 1.21.5 the client damps every mob it does not run the AI of (!isEffectiveAi) by
-    // 0.98, its own mount included; since, only those it does not move (!canSimulateMovement).
-    if (this.verLessThan("1.21.5")) mob.vel.scale(0.98);
+    // LivingEntity.aiStep: a step toward where a server teleport put the mob (Mth.lerp of 1 / the steps left from
+    // 1.20.2, a division before); else, before 1.21.5 the client damps every mob it does not run the AI of
+    // (!isEffectiveAi) by 0.98, its own mount included; since, only those it does not move (!canSimulateMovement).
+    if (mob.lerpSteps > 0 && mob.lerpTarget) {
+      const t = mob.lerpTarget;
+      const n = mob.lerpSteps;
+      const p = mob.pos;
+      // InterpolationHandler.interpolate (1.21.5+): the mob's own move since the last step goes with the target
+      if (!this.verLessThan("1.21.5") && mob.lerpPrevious) t.add(p.minus(mob.lerpPrevious));
+      if (this.verLessThan("1.20.2")) p.set(p.x + (t.x - p.x) / n, p.y + (t.y - p.y) / n, p.z + (t.z - p.z) / n);
+      else p.set(p.x + (1 / n) * (t.x - p.x), p.y + (1 / n) * (t.y - p.y), p.z + (1 / n) * (t.z - p.z));
+      mob.lerpSteps--;
+      mob.lerpPrevious = p.clone();
+      mob.keptBoundingBox = null;
+    } else if (this.verLessThan("1.21.5")) {
+      mob.vel.scale(0.98);
+    }
     const negligible = this.verLessThan("1.9") ? 0.005 : 0.003;
     if (Math.abs(mob.vel.x) < negligible) mob.vel.x = 0;
     if (Math.abs(mob.vel.y) < negligible) mob.vel.y = 0;
@@ -232,6 +246,29 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     }
     const sprintBonus = rider.sprinting && mob.dashCooldown === 0 ? f32(0.1) : 0;
     mob.riddenSpeed = f32(f32(mob.movementSpeed) + sprintBonus);
+  }
+
+  /**
+   * A server teleport of the mob its rider controls (ClientPacketListener.handleTeleportEntity, which applies it to a
+   * controlled vehicle from 1.21.2): the mob interpolates there over 3 ticks (LivingEntity.lerpTo, InterpolationHandler),
+   * or is put there at once when it is more than 64 blocks away.
+   */
+  teleportRidden(mob: RiddenMobState, target: Vec3) {
+    if (mob.pos.distanceSquared(target) > 4096) {
+      mob.pos.set(target.x, target.y, target.z);
+      mob.lerpSteps = 0;
+      mob.lerpTarget = null;
+      mob.keptBoundingBox = null;
+      return;
+    }
+    mob.lerpTarget = target.clone();
+    mob.lerpSteps = 3;
+    mob.lerpPrevious = mob.pos.clone();
+  }
+
+  /** Where the mob is headed (Entity.lerpTargetX, what the vehicle move reports): the teleport's target while it runs. */
+  lerpTargetOf(mob: RiddenMobState): Vec3 {
+    return mob.lerpSteps > 0 && mob.lerpTarget ? mob.lerpTarget.clone() : mob.pos.clone();
   }
 
   /** Camel.executeRidersJump: a dash along its look, 22.2222F * scale * MOVEMENT_SPEED far and 1.4285F * scale high. */
