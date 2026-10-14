@@ -2381,54 +2381,25 @@ export class BotcraftPhysics implements IPhysics {
     return f32(factor + f32(efficiency * f32(1 - factor)));
   }
 
-  // localPlayer.java
-  isCollidedHorizontallyMinor(state: IEntityState, var1: Vec3): boolean {
-    if (!(state instanceof PlayerState)) return false;
-
-    if (this.verGreaterThan("1.20.3")) { // apparently 1.20.4+ {
-      const player = state as PlayerState;
-
-      // @Override
-      // protected boolean isHorizontalCollisionMinor(Vec3 var1) {
-      //    float var2 = this.getYRot() * (float) (Math.PI / 180.0);
-      //    double var3 = (double)Mth.sin(var2);
-      //    double var5 = (double)Mth.cos(var2);
-      //    double var7 = (double)this.xxa * var5 - (double)this.zza * var3;
-      //    double var9 = (double)this.zza * var5 + (double)this.xxa * var3;
-      //    double var11 = Mth.square(var7) + Mth.square(var9);
-      //    double var13 = Mth.square(var1.x) + Mth.square(var1.z);
-      //    if (!(var11 < 1.0E-5F) && !(var13 < 1.0E-5F)) {
-      //       double var15 = var7 * var1.x + var9 * var1.z;
-      //       double var17 = Math.acos(var15 / Math.sqrt(var11 * var13));
-      //       return var17 < 0.13962634F;
-      //    } else {
-      //       return false;
-      //    }
-      // }
-
-      const yawRad = Math.PI - player.yaw //* (Math.PI / 180);
-      const sinYaw = Math.sin(yawRad);
-      const cosYaw = Math.cos(yawRad);
-      const xxa = player.prevHeading.forward
-      const zza = player.prevHeading.strafe
-
-      const xxaRot = xxa * cosYaw - zza * sinYaw;
-      const zzaRot = zza * cosYaw + xxa * sinYaw;
-
-      const horizSpeed = xxaRot ** 2 + zzaRot ** 2;
-      const horizMovement = var1.x ** 2 + var1.z ** 2;
-      if (horizSpeed >= 1e-5 && horizMovement >= 1e-5) {
-        const dot = xxaRot * var1.x + zzaRot * var1.z;
-        let angle = Math.acos(dot / Math.sqrt(horizSpeed * horizMovement));
-
-        // unsure why this is needed, but this ends up matching.
-        angle = Math.abs(angle - Math.PI / 2)
-        return angle < 0.13962634; // magic number
-
-      } else return false;
-    }
-    return false;
-
+  /**
+   * LocalPlayer.isHorizontalCollisionMinor (1.18+): the collided movement turns less than 8 degrees from the input
+   * direction (xxa, zza turned by Mth.sin/cos of the float yaw), so a sprint grazing a wall goes on.
+   */
+  isCollidedHorizontallyMinor(state: IEntityState, movement: Vec3): boolean {
+    if (!(state instanceof PlayerState) || this.verLessThan("1.18")) return false;
+    const yaw = floatRadians(this.yawDegrees(state));
+    const sin = this.mth.sin(yaw);
+    const cos = this.mth.cos(yaw);
+    const xxa = state.heading.strafe;
+    const zza = state.heading.forward;
+    const inputX = xxa * cos - zza * sin;
+    const inputZ = zza * cos + xxa * sin;
+    const inputSqr = inputX * inputX + inputZ * inputZ;
+    const movementSqr = movement.x * movement.x + movement.z * movement.z;
+    // (1.0E-5F)
+    if (inputSqr < 9.999999747378752e-6 || movementSqr < 9.999999747378752e-6) return false;
+    const angle = Math.acos((inputX * movement.x + inputZ * movement.z) / Math.sqrt(inputSqr * movementSqr));
+    return angle < 0.13962633907794952; // (double)0.13962634F
   }
 
   checkInsideBlocks(player: PlayerState, world: World, worldSettings = new PhysicsWorldSettings(this.data)) {
