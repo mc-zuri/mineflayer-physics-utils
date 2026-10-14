@@ -555,7 +555,9 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
     const pushNorm = push.norm();
+    // the minimum push for a player at rest came with 1.16
     if (
+      !this.verLessThan("1.16") &&
       Math.abs(player.vel.x) < ctx.worldSettings.negligeableVelocity &&
       Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity &&
       pushNorm < 0.0045000000000000005
