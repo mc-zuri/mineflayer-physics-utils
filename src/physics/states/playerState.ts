@@ -1,6 +1,5 @@
 import { Bot, ControlState, ControlStateStatus, Effect, GameMode } from "mineflayer";
 import { AABB } from "@nxg-org/mineflayer-util-plugin";
-import * as nbt from "prismarine-nbt";
 import { Vec3 } from "vec3";
 import {
     CheapEffects,
@@ -331,27 +330,18 @@ export class PlayerState implements IEntityState {
         this.blindness = this.ctx.getEffectLevel(CheapEffects.BLINDNESS, this.effects);
 
 
-        // armour enchantments
-        //const boots = bot.inventory.slots[8];
-        const boots = bot.entity.equipment[5];
-        if (boots && boots.nbt) {
-            const simplifiedNbt = nbt.simplify(boots.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, enchantments);
-            this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, enchantments);
-        } else {
-            this.depthStrider = 0;
-            this.soulSpeed = 0;
-        }
-
-        const leggings = bot.entity.equipment[3];
-        if (leggings && leggings.nbt) {
-            const simplifiedNbt = nbt.simplify(leggings.nbt);
-            const enchantments = simplifiedNbt.Enchantments ?? simplifiedNbt.ench ?? [];
-            this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantments);
-        } else {
-            this.swiftSneak = 0;
-        }
+        // armour enchantments: the boots and leggings in their inventory slots. prismarine-item reads them from the
+        // nbt as { name, lvl }; from 1.20.5 its enchants are the enchantments component as sent, { enchantments: [{ id, level }] }
+        type Enchants = { name: string; lvl: number }[] | { enchantments?: { id: number; level: number }[] };
+        const enchantmentsOf = (slot: string) => {
+            const enchants = (bot.inventory.slots[bot.getEquipmentDestSlot(slot)] as { enchants?: Enchants } | null | undefined)?.enchants;
+            if (Array.isArray(enchants)) return enchants.map(({ name, lvl }) => ({ id: name, lvl }));
+            return (enchants?.enchantments ?? []).map(({ id, level }) => ({ id, lvl: level }));
+        };
+        const boots = enchantmentsOf("feet");
+        this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, boots);
+        this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, boots);
+        this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantmentsOf("legs"));
 
         this.pose = getPose(bot.entity);
         this.gameMode = bot.game.gameMode;
