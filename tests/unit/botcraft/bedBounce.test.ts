@@ -23,4 +23,20 @@ describe("Botcraft bed bounce", () => {
       expect(rig.playerState.vel.y).toBe(0.8957723259785367);
     });
   }
+
+  // Before 1.12 a bed has no onLanded and stops the fall like any block. m_bed: falling onto the foot of a bed
+  // (part=foot, facing=east) at (3, 101, 2848).
+  for (const version of ["1.8.8", "1.11.2"]) {
+    it(`does not bounce before 1.12 (${version}, m_bed t9)`, () => {
+      const world = createFlatWorld(version, 101);
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(3.9000000953674316, 101.60909999847412, 2848.5), groundLevel: 0 });
+      world.setOverrideBlock(new Vec3(3, 101, 2848), rig.mcData.blocksByName.bed.id, 3);
+      rig.playerState.vel.set(0, -0.1552320045166016, 0);
+
+      rig.physics.simulate(rig.playerCtx, world as any);
+
+      expect(rig.playerState.pos.y).toBe(101.5625);
+      expect(rig.playerState.vel.y).toBe(-0.0784000015258789);
+    });
+  }
 });

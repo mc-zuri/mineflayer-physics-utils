@@ -2499,8 +2499,9 @@ export class BotcraftPhysics implements IPhysics {
         if (blockBelow != null) {
           if (this.slimeBlockId === blockBelow.type) {
             newSpeed = -player.vel.y;
-          } else if (this.bedId === blockBelow.type) {
-            newSpeed = player.vel.y * -0.6600000262260437; // BedBlock.bounceUp: 0.66F
+          } else if (this.bedId === blockBelow.type && !this.verLessThan("1.12")) {
+            // BedBlock.bounceUp (1.12+): only a fall bounces, keeping 0.66F of its speed
+            newSpeed = player.vel.y < 0 ? player.vel.y * -0.6600000262260437 : player.vel.y;
           }
         }
         player.vel.y = newSpeed;
