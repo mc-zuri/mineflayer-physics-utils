@@ -2456,7 +2456,8 @@ export class BotcraftPhysics implements IPhysics {
     }
     // the box shrunk by 0.001 before 1.19.3, by 1e-7 until 1.21.2, then by 1e-5F (boxTraverseBlocks)
     const inset = this.verLessThan("1.19.3") ? 0.001 : this.verLessThan("1.21.2") ? 1e-7 : 9.999999747378752e-6;
-    const aabb = player.getBB().expand(-inset, -inset, -inset);
+    // the box the move left (before 1.17 vanilla keeps it, with its pre-1.14 sneaking height of 1.65F)
+    const aabb = this.boundingBoxForMove(player).bb.expand(-inset, -inset, -inset);
     const [minAABB, maxAABB] = aabb.minAndMaxArrays();
     const [x0, y0, z0] = minAABB.map(Math.floor);
     const [x1, y1, z1] = maxAABB.map(Math.floor);
