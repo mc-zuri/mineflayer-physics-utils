@@ -3392,7 +3392,11 @@ export class BotcraftPhysics implements IPhysics {
     let x = player.heading.strafe;
     let z = player.heading.forward;
     const lengthSqr = x * x + z * z;
-    if (lengthSqr < 1e-7) return;
+    if (lengthSqr < 1e-7) {
+      // moveRelative adds Vec3.ZERO then, which turns a -0 motion into 0
+      player.vel.translate(0, 0, 0);
+      return;
+    }
     if (lengthSqr > 1) {
       const length = this.verLessThan("1.17") ? Math.fround(Math.sqrt(lengthSqr)) : Math.sqrt(lengthSqr);
       x /= length;
