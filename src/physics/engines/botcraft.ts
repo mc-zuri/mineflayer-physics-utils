@@ -165,6 +165,7 @@ export class BotcraftPhysics implements IPhysics {
     const tmp1 = getEnchantmentNamesForVersion(this.supportFeature);
     for (const key in tmp1) {
       this.enchantmentNames[ind as CheapEnchantments] = tmp1[key as CheapEnchantmentNames];
+      ind++;
     }
     Object.freeze(this.enchantmentNames);
   }
