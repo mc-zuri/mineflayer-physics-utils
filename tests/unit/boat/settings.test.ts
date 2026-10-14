@@ -24,16 +24,6 @@ function loadEPhysicsCtx() {
 }
 /* eslint-enable @typescript-eslint/no-require-imports */
 
-const BASELINE_IN_WATER = {
-  pos: { x: 0, y: 63.593703703861685, z: 0 },
-  vel: { x: 0, y: -0.006296296138316393, z: 0 },
-};
-
-const BASELINE_ON_LAND = {
-  pos: { x: 0, y: 63.96000000089407, z: -0.03999999910593033 },
-  vel: { x: 0, y: -0.03999999910593033, z: -0.03999999910593033 },
-};
-
 describe("Boat settings resolution", () => {
   it("normalizes float32 fields and preserves double fields from default", () => {
     const { FLOAT32_FIELDS, resolveBoatSettings } = loadBoatSettingsModule();
@@ -127,62 +117,44 @@ describe("Boat settings simulation parity", () => {
   const waterSurfaceY = 64;
   const boatY = waterSurfaceY - 0.4;
 
-  it("matches baseline IN_WATER tick exactly", () => {
-    const rig = createBoatRig({ version, position: new Vec3(0, boatY, 0), floorY: waterSurfaceY - 2 });
-    for (let x = -1; x <= 1; x++) {
-      for (let z = -1; z <= 1; z++) {
-        fillWaterColumn(rig.world, x, z, waterSurfaceY - 1, waterSurfaceY - 1, 0);
-      }
-    }
-    rig.boatState.status = BoatStatus.IN_WATER;
-    rig.boatState.previousStatus = BoatStatus.IN_WATER;
-    rig.boatState.waterLevel = waterSurfaceY;
-    simulateBoatTick(rig);
-
-    expect(rig.boatState.pos.x).toBe(BASELINE_IN_WATER.pos.x);
-    expect(rig.boatState.pos.y).toBe(BASELINE_IN_WATER.pos.y);
-    expect(rig.boatState.pos.z).toBe(BASELINE_IN_WATER.pos.z);
-    expect(rig.boatState.vel.x).toBe(BASELINE_IN_WATER.vel.x);
-    expect(rig.boatState.vel.y).toBe(BASELINE_IN_WATER.vel.y);
-    expect(rig.boatState.vel.z).toBe(BASELINE_IN_WATER.vel.z);
-  });
-
-  it("matches baseline ON_LAND controlled tick exactly", () => {
-    const rig = createBoatRig({ version, position: new Vec3(0, waterSurfaceY, 0), floorY: waterSurfaceY - 1 });
-    rig.boatState.status = BoatStatus.ON_LAND;
-    rig.boatState.previousStatus = BoatStatus.ON_LAND;
-    rig.boatState.landFriction = 0.6;
-    rig.boatState.controllingPlayer = true;
-    rig.boatState.control.forward = true;
-    simulateBoatTick(rig);
-
-    expect(rig.boatState.pos.x).toBe(BASELINE_ON_LAND.pos.x);
-    expect(rig.boatState.pos.y).toBe(BASELINE_ON_LAND.pos.y);
-    expect(rig.boatState.pos.z).toBe(BASELINE_ON_LAND.pos.z);
-    expect(rig.boatState.vel.x).toBe(BASELINE_ON_LAND.vel.x);
-    expect(rig.boatState.vel.y).toBe(BASELINE_ON_LAND.vel.y);
-    expect(rig.boatState.vel.z).toBe(BASELINE_ON_LAND.vel.z);
-  });
-
-  it("simulates boat physics when FROM_ENTITY_STATE has no entityType", () => {
+  // the same tick through the context with the resolved boat settings and through one without an entity type
+  function bothPaths(setup: (rig: ReturnType<typeof createBoatRig>) => void, floorY: number, y: number) {
     const EPhysicsCtx = loadEPhysicsCtx();
-    const rig = createBoatRig({ version, position: new Vec3(0, boatY, 0), floorY: waterSurfaceY - 2 });
-    for (let x = -1; x <= 1; x++) {
-      for (let z = -1; z <= 1; z++) {
-        fillWaterColumn(rig.world, x, z, waterSurfaceY - 1, waterSurfaceY - 1, 0);
-      }
-    }
-    rig.boatState.status = BoatStatus.IN_WATER;
-    rig.boatState.previousStatus = BoatStatus.IN_WATER;
-    rig.boatState.waterLevel = waterSurfaceY;
-
-    const boatCtx = EPhysicsCtx.FROM_ENTITY_STATE(rig.physics, rig.boatState);
+    const withSettings = createBoatRig({ version, position: new Vec3(0, y, 0), floorY });
+    setup(withSettings);
+    simulateBoatTick(withSettings);
+    const without = createBoatRig({ version, position: new Vec3(0, y, 0), floorY });
+    setup(without);
+    const boatCtx = EPhysicsCtx.FROM_ENTITY_STATE(without.physics, without.boatState);
     expect(boatCtx.boat).toBeUndefined();
+    without.physics.simulate(boatCtx, without.world);
+    return [withSettings.boatState, without.boatState];
+  }
 
-    rig.physics.simulate(boatCtx, rig.world);
+  it("simulates an IN_WATER tick the same without an entity type", () => {
+    const [a, b] = bothPaths((rig) => {
+      for (let x = -1; x <= 1; x++) {
+        for (let z = -1; z <= 1; z++) {
+          fillWaterColumn(rig.world, x, z, waterSurfaceY - 1, waterSurfaceY - 1, 0);
+        }
+      }
+      rig.boatState.status = BoatStatus.IN_WATER;
+      rig.boatState.previousStatus = BoatStatus.IN_WATER;
+    }, waterSurfaceY - 2, boatY);
+    expect(b.pos).toEqual(a.pos);
+    expect(b.vel).toEqual(a.vel);
+  });
 
-    expect(rig.boatState.pos.y).toBe(BASELINE_IN_WATER.pos.y);
-    expect(rig.boatState.vel.y).toBe(BASELINE_IN_WATER.vel.y);
+  it("simulates a controlled ON_LAND tick the same without an entity type", () => {
+    const [a, b] = bothPaths((rig) => {
+      rig.boatState.status = BoatStatus.ON_LAND;
+      rig.boatState.previousStatus = BoatStatus.ON_LAND;
+      rig.boatState.landFriction = 0.6;
+      rig.boatState.controllingPlayer = true;
+      rig.boatState.control.forward = true;
+    }, waterSurfaceY - 1, waterSurfaceY);
+    expect(b.pos).toEqual(a.pos);
+    expect(b.vel).toEqual(a.vel);
   });
 });
 

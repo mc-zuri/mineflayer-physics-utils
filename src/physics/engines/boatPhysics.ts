@@ -142,7 +142,7 @@ export class BoatPhysics extends EntityPhysics {
         for (cursor.z = minZ; cursor.z < maxZ; cursor.z++) {
           const block = world.getBlock(cursor);
           if (!this.isWaterBlock(block)) continue;
-          const fluidHeight = cursor.y + this.getFluidHeight(block, world, cursor);
+          const fluidHeight = Math.fround(cursor.y + this.getFluidHeight(block, world, cursor));
           if (topY < fluidHeight) {
             if (!this.isSourceWater(block)) {
               return BoatStatus.UNDER_FLOWING_WATER;
@@ -172,7 +172,7 @@ export class BoatPhysics extends EntityPhysics {
         for (cursor.z = minZ; cursor.z < maxZ; cursor.z++) {
           const block = world.getBlock(cursor);
           if (!this.isWaterBlock(block)) continue;
-          const fluidHeight = cursor.y + this.getFluidHeight(block, world, cursor);
+          const fluidHeight = Math.fround(cursor.y + this.getFluidHeight(block, world, cursor));
           state.waterLevel = Math.max(state.waterLevel, fluidHeight);
           inWater ||= bb.minY < fluidHeight;
         }
@@ -205,7 +205,7 @@ export class BoatPhysics extends EntityPhysics {
 
       if (maxSliceHeight >= 1) continue;
       if (maxSliceHeight < 1) {
-        return cursor.y + maxSliceHeight;
+        return Math.fround(cursor.y + maxSliceHeight);
       }
     }
 
@@ -280,15 +280,22 @@ export class BoatPhysics extends EntityPhysics {
     return Number(block.getProperties().level) === 0;
   }
 
+  /**
+   * The water's height in its block, a float: 1 under the same fluid; else FluidState.getOwnHeight, amount / 9F (1.13+;
+   * a source or falling water is 8), before 1.13 BlockLiquid's 1F - (level + 1) / 9F (falling counts as 0), where only
+   * a source or falling water reaches 1 under water.
+   */
   private getFluidHeight(block: Block, world: PhysicsWorld, pos: Vec3): number {
+    const f32 = Math.fround;
     const above = world.getBlock(pos.offset(0, 1, 0));
-    if (this.isSameFluid(block, above)) {
-      return 1;
+    const props = block.getProperties();
+    const level = props.waterlogged || this.waterLike.has(block.type) ? 0 : Number(props.level ?? block.metadata ?? 0);
+    if (this.data.version["<"]("1.13")) {
+      if ((level & 7) === 0 && this.isWaterBlock(above)) return 1;
+      return f32(1 - f32(((level >= 8 ? 0 : level) + 1) / 9));
     }
-    if (block.getProperties().waterlogged || this.waterLike.has(block.type) || block.type === this.waterId) {
-      return 1 - this.getLiquidHeightPcent(block);
-    }
-    return 0;
+    if (this.isSameFluid(block, above)) return 1;
+    return f32((level >= 8 ? 8 : 8 - level) / 9);
   }
 
   private floatBoat(
