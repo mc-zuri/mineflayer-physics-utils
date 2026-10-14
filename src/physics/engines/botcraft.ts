@@ -497,15 +497,19 @@ export class BotcraftPhysics implements IPhysics {
             continue;
           }
 
+          // FluidState.getHeight: 1 under the same fluid from 1.14, else the float own height (amount / 9F); the
+          // top is the float y + height
           let fluidHeight = 0.0;
           const blockAbv = world.getBlock(blockPos.offset(0, 1, 0));
-          if ((blockAbv != null && waterCond(blockAbv) && waterRes) || (lavaCond(blockAbv) && lavaRes)) {
+          const sameAbove = (blockAbv != null && waterCond(blockAbv) && waterRes) || (lavaCond(blockAbv) && lavaRes);
+          if (sameAbove && !this.verLessThan("1.14")) {
             fluidHeight = 1.0;
           } else {
-            fluidHeight = this.getLiquidHeightPcent(block);
+            fluidHeight = this.ownFluidHeight(block);
           }
+          const top = Math.fround(blockPos.y + fluidHeight);
 
-          if (fluidHeight + blockPos.y < minAABB.y) {
+          if (top < minAABB.y) {
             continue;
           }
 
@@ -516,12 +520,12 @@ export class BotcraftPhysics implements IPhysics {
             }
           } else {
             player.isInLava = true;
-            if (fluidHeight + blockPos.y > eyeHeight) {
+            if (top > eyeHeight) {
               player.isUnderLava = true;
             }
           }
 
-          fluidRelativeHeight = Math.max(fluidHeight + blockPos.y - minAABB.y, fluidRelativeHeight);
+          fluidRelativeHeight = Math.max(top - minAABB.y, fluidRelativeHeight);
 
           if (player.flying) continue;
 
@@ -779,6 +783,13 @@ export class BotcraftPhysics implements IPhysics {
       if (above != null && this.getRenderedDepth(above) >= 0) return 1;
     }
     return Math.fround((8 - this.getRenderedDepth(block)) / 9);
+  }
+
+  /** FlowingFluid.getOwnHeight: the float amount / 9F (a source, waterlogged block or falling fluid holds 8). */
+  private ownFluidHeight(block: Block) {
+    const fluidBlock = block.type === this.waterId || block.type === this.lavaId;
+    const amount = !fluidBlock || block.metadata >= 8 ? 8 : 8 - block.metadata;
+    return Math.fround(amount / 9);
   }
 
   getLiquidHeightPcent(block: Block) {
