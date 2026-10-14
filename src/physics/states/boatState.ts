@@ -19,7 +19,10 @@ export class BoatState extends EntityState {
 
   waterLevel = -Infinity;
   landFriction = 0;
+  /** Boat.deltaRotation: the yaw it turns by each tick, float degrees. */
   yawVelocity = 0;
+  /** The yaw as vanilla holds it (Entity.yRot): float degrees, whole turns kept. */
+  yawDegrees: number;
   lastVerticalVelocity = 0;
   controllingPlayer = false;
 
@@ -37,6 +40,25 @@ export class BoatState extends EntityState {
     control: ControlStateHandler = ControlStateHandler.DEFAULT(),
   ) {
     super(ctx, height, halfWidth, pos, vel, onGround, yaw, pitch, control);
+    this.yawDegrees = BoatState.degreesOf(yaw);
+  }
+
+  /** Float degrees from mineflayer's radians (whole turns lost), for an entity that does not keep its own. */
+  private static degreesOf(yaw: number): number {
+    return Math.fround(((Math.PI - yaw) * 180) / Math.PI);
+  }
+
+  /** Takes the entity's float degrees (yawDegrees) when it keeps them, else derives them from its radians. */
+  private takeYaw(entity: Entity): void {
+    const degrees = (entity as Entity & { yawDegrees?: unknown }).yawDegrees;
+    this.yaw = entity.yaw;
+    this.yawDegrees = degrees == null ? BoatState.degreesOf(entity.yaw) : Math.fround(Number(degrees));
+  }
+
+  /** Turns the boat to float degrees, keeping mineflayer's radians in step. */
+  public setYawDegrees(degrees: number): void {
+    this.yawDegrees = Math.fround(degrees);
+    this.yaw = Math.PI - (this.yawDegrees * Math.PI) / 180;
   }
 
   public static CREATE_FROM_ENTITY(
@@ -45,7 +67,7 @@ export class BoatState extends EntityState {
     control: ControlStateHandler = ControlStateHandler.DEFAULT(),
   ): BoatState {
     const dims = resolveBoatDimensions(ctx.data, entity.name);
-    return new BoatState(
+    const state = new BoatState(
       ctx,
       dims.height,
       dims.width / 2,
@@ -56,6 +78,8 @@ export class BoatState extends EntityState {
       entity.pitch,
       control.clone(),
     );
+    state.takeYaw(entity);
+    return state;
   }
 
   public updateControls(control: ControlStateHandler): BoatState {
@@ -68,7 +92,7 @@ export class BoatState extends EntityState {
     if (options?.replaceVelocity !== false) {
       this.vel.set(entity.velocity.x, entity.velocity.y, entity.velocity.z);
     }
-    this.yaw = entity.yaw;
+    this.takeYaw(entity);
     this.pitch = entity.pitch;
     this.onGround = entity.onGround ?? false;
     const entityExtras = entity as Entity & {
@@ -84,6 +108,7 @@ export class BoatState extends EntityState {
     entity.position.set(this.pos.x, this.pos.y, this.pos.z);
     entity.velocity.set(this.vel.x, this.vel.y, this.vel.z);
     entity.yaw = this.yaw;
+    (entity as Entity & { yawDegrees?: number }).yawDegrees = this.yawDegrees;
     entity.pitch = this.pitch;
     entity.onGround = this.onGround;
     const entityExtras = entity as Entity & {
@@ -112,6 +137,7 @@ export class BoatState extends EntityState {
     other.waterLevel = this.waterLevel;
     other.landFriction = this.landFriction;
     other.yawVelocity = this.yawVelocity;
+    other.yawDegrees = this.yawDegrees;
     other.lastVerticalVelocity = this.lastVerticalVelocity;
     other.controllingPlayer = this.controllingPlayer;
     other.worldReady = this.worldReady;

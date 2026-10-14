@@ -7,6 +7,7 @@ import { BoatPhysicsSettings, resolveBoatSettings } from "../settings/boatSettin
 import { BoatState, BoatStatus } from "../states/boatState";
 import { IEntityState } from "../states";
 import { EntityPhysics } from "./entityPhysics";
+import { Mth, mthFor } from "../../util/mth";
 
 type PhysicsWorld = {
   getBlock(pos: Vec3): Block | null | undefined;
@@ -14,10 +15,12 @@ type PhysicsWorld = {
 
 export class BoatPhysics extends EntityPhysics {
   private readonly boatSettings: BoatPhysicsSettings;
+  private readonly mth: Mth;
 
   constructor(mcData: md.IndexedData) {
     super(mcData);
     this.boatSettings = resolveBoatSettings(mcData);
+    this.mth = mthFor(!mcData.version["<"]("1.21.11"));
   }
 
   simulate(simCtx: EPhysicsCtx, world: PhysicsWorld): IEntityState {
@@ -37,7 +40,7 @@ export class BoatPhysics extends EntityPhysics {
     state.previousStatus = state.status;
     state.status = this.getStatus(simCtx, state, world, cfg);
     this.floatBoat(simCtx, state, world, cfg);
-    this.controlBoat(state, cfg);
+    this.controlBoat(state);
     state.lastVerticalVelocity = state.vel.y;
 
     this.moveEntity(simCtx, state.vel.x, state.vel.y, state.vel.z, world);
@@ -373,33 +376,24 @@ export class BoatPhysics extends EntityPhysics {
     }
   }
 
-  private controlBoat(state: BoatState, cfg: BoatPhysicsSettings): void {
-    const control = state.control;
-    let acceleration = 0;
-
-    if (control.left) {
-      state.yawVelocity += cfg.rotationPerTick;
-    }
-    if (control.right) {
-      state.yawVelocity -= cfg.rotationPerTick;
-    }
-    if (control.right !== control.left && !control.forward && !control.back) {
-      acceleration += cfg.turnOnlyAcceleration;
-    }
-
-    state.yaw += state.yawVelocity;
-
-    if (control.forward) {
-      acceleration += cfg.forwardAcceleration;
-    }
-    if (control.back) {
-      acceleration -= cfg.backwardAcceleration;
-    }
-
-    if (acceleration !== 0) {
-      state.vel.x = Math.fround(state.vel.x + -Math.sin(state.yaw) * acceleration);
-      state.vel.z = Math.fround(state.vel.z + -Math.cos(state.yaw) * acceleration);
-    }
+  /**
+   * Boat.controlBoat: the turn keys change deltaRotation by a degree each (float), the yaw (float degrees) turns by it,
+   * and the motion gains the float push along Mth.sin/cos of the yaw: 0.04F forward, -0.005F back, 0.005F turning in
+   * place.
+   */
+  private controlBoat(state: BoatState): void {
+    const f32 = Math.fround;
+    const { left, right, forward, back } = state.control;
+    let push = 0;
+    if (left) state.yawVelocity = f32(state.yawVelocity - 1);
+    if (right) state.yawVelocity = f32(state.yawVelocity + 1);
+    if (right !== left && !forward && !back) push = f32(push + f32(0.005));
+    state.setYawDegrees(f32(state.yawDegrees + state.yawVelocity));
+    if (forward) push = f32(push + f32(0.04));
+    if (back) push = f32(push - f32(0.005));
+    const radians = f32(state.yawDegrees * f32(0.017453292));
+    state.vel.x += f32(this.mth.sin(f32(-radians)) * push);
+    state.vel.z += f32(this.mth.cos(radians) * push);
   }
 
   getPaddleState(state: BoatState): { leftPaddle: boolean; rightPaddle: boolean } {
