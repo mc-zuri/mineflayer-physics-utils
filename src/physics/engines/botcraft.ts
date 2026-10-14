@@ -563,6 +563,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   getFlow(block: Block, world: World) {
+    if (!this.verLessThan("1.13")) return this.getFlowModern(block, world);
     const curlevel = this.getRenderedDepth(block);
     const flow = new Vec3(0, 0, 0);
     for (const [dx, dz] of [
@@ -609,6 +610,81 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     return flow.normalize();
+  }
+
+  /**
+   * FlowingFluid.getFlow (1.13+): toward each horizontal neighbour (north, east, south, west) that is empty or of the
+   * same fluid, the float difference of the fluid's own heights (amount / 9F); a neighbour without fluid that does not
+   * block motion compares with the fluid below it, less 0.8888889F (a drop-off). Falling fluid next to a solid face
+   * turns down by 6. The sum is normalized as Vec3.normalize.
+   */
+  private getFlowModern(block: Block, world: World) {
+    const f32 = Math.fround;
+    const lava = block.type === this.lavaId;
+    const fluidOf = (b: Block | null) => (b == null ? null : b.type === this.lavaId ? "lava" : this.getRenderedDepth(b) >= 0 ? "water" : null);
+    const own = fluidOf(block);
+    const amount = (b: Block) => {
+      // waterlogged blocks and water plants hold a source; a fluid block's level drops its amount, falling is full
+      if (b.type !== this.waterId && b.type !== this.lavaId) return 8;
+      return b.metadata >= 8 ? 8 : 8 - b.metadata;
+    };
+    const ownHeight = (b: Block | null) => (b != null && fluidOf(b) === own ? f32(amount(b) / 9) : 0);
+    const affectsFlow = (b: Block | null) => b == null || fluidOf(b) == null || fluidOf(b) === own;
+    const blocksMotion = (b: Block | null) =>
+      b != null && ((b.boundingBox === "block" && b.type !== this.webId) || /sign|banner|pressure_plate/.test(b.name));
+    const height = ownHeight(block);
+    let x = 0.0;
+    let z = 0.0;
+    const directions = [
+      [0, -1], // north
+      [1, 0], // east
+      [0, 1], // south
+      [-1, 0], // west
+    ];
+    for (const [dx, dz] of directions) {
+      const neighbourPos = block.position.offset(dx, 0, dz);
+      const neighbour = world.getBlock(neighbourPos);
+      if (!affectsFlow(neighbour)) continue;
+      let neighbourHeight = ownHeight(neighbour);
+      let difference = 0;
+      if (neighbourHeight === 0) {
+        if (!blocksMotion(neighbour)) {
+          const below = world.getBlock(neighbourPos.offset(0, -1, 0));
+          if (affectsFlow(below)) {
+            neighbourHeight = ownHeight(below);
+            if (neighbourHeight > 0) difference = f32(height - f32(neighbourHeight - f32(0.8888889)));
+          }
+        }
+      } else if (neighbourHeight > 0) {
+        difference = f32(height - neighbourHeight);
+      }
+      if (difference !== 0) {
+        x += f32(dx * difference);
+        z += f32(dz * difference);
+      }
+    }
+    let flow = new Vec3(x, 0, z);
+    const falling = (block.type === this.waterId || lava) && block.metadata >= 8;
+    if (falling) {
+      const isSolidFace = (b: Block | null) =>
+        b != null && fluidOf(b) !== own && b.name !== "ice" && b.name !== "frosted_ice" && b.boundingBox !== "empty";
+      for (const [dx, dz] of directions) {
+        const neighbourPos = block.position.offset(dx, 0, dz);
+        if (isSolidFace(world.getBlock(neighbourPos)) || isSolidFace(world.getBlock(neighbourPos.offset(0, 1, 0)))) {
+          flow = this.normalizeVec(flow).translate(0, -6, 0);
+          break;
+        }
+      }
+    }
+    return this.normalizeVec(flow);
+  }
+
+  /** Vec3.normalize: a float square root before 1.17; zero below 1e-4, below 1e-5F from 1.21.2. */
+  private normalizeVec(v: Vec3) {
+    const sum = v.x * v.x + v.y * v.y + v.z * v.z;
+    const length = this.verLessThan("1.17") ? Math.fround(Math.sqrt(sum)) : Math.sqrt(sum);
+    if (length < (this.verLessThan("1.21.2") ? 1e-4 : 9.999999747378752e-6)) return new Vec3(0, 0, 0);
+    return new Vec3(v.x / length, v.y / length, v.z / length);
   }
 
   /**

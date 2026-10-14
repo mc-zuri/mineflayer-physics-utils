@@ -153,11 +153,12 @@ describe("Botcraft right-angle water channel", () => {
           new Vec3(0, 0, 1),
         ];
 
+        // FlowingFluid.getFlow subtracts the float heights (amount / 9F), so the corner is diagonal to about 1e-7
         waterPath.forEach((position, index) => {
           const flow = physics.getFlow(world.getBlock(position)!, world);
-          expect(flow.x).toBeCloseTo(expectedFlows[index].x, 12);
-          expect(flow.y).toBeCloseTo(expectedFlows[index].y, 12);
-          expect(flow.z).toBeCloseTo(expectedFlows[index].z, 12);
+          expect(flow.x).toBeCloseTo(expectedFlows[index].x, 6);
+          expect(flow.y).toBeCloseTo(expectedFlows[index].y, 6);
+          expect(flow.z).toBeCloseTo(expectedFlows[index].z, 6);
         });
       });
 
@@ -199,6 +200,11 @@ describe("Botcraft right-angle water channel", () => {
         const { physics, playerCtx, playerState, world } = createLoggedWaterBendRig(version);
         const corner = world.getBlock(new Vec3(-17, -60, 6))!;
         const outgoing = world.getBlock(new Vec3(-17, -60, 5))!;
+        // FlowingFluid.getFlow: the float height differences toward the level-2 cell east and the level-4 cell north
+        const f32 = Math.fround;
+        const east = f32(f32(5 / 9) - f32(6 / 9));
+        const north = f32(f32(5 / 9) - f32(4 / 9));
+        const length = Math.sqrt(east * east + north * north);
 
         expect({
           cornerMetadata: corner.metadata,
@@ -209,7 +215,7 @@ describe("Botcraft right-angle water channel", () => {
           southMetadata: world.getBlock(new Vec3(-17, -60, 6))!.metadata,
         }).toEqual({
           cornerMetadata: 3,
-          cornerFlow: new Vec3(-1 / Math.sqrt(2), 0, -1 / Math.sqrt(2)),
+          cornerFlow: new Vec3(east / length, 0, -north / length),
           outgoingMetadata: 4,
           outgoingFlow: new Vec3(0, 0, -1),
           northMetadata: 5,
