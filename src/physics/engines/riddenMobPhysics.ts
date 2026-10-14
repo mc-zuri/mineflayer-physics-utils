@@ -82,6 +82,21 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       mob.jumpPendingScale = 0;
       mob.horseJumping = false;
     }
+    if (HORSE_TYPES.has(mob.type)) {
+      // AbstractHorse.tick, after the move: the rearing it started itself ends after 20 ticks (counted up when the
+      // client runs the horse's AI, until 1.21.6; down since), and a horse that does not rear no longer lets the
+      // rider's jump move it rearing
+      if (!this.verLessThan("1.21.6")) {
+        if (mob.standCounter > 0 && --mob.standCounter <= 0) {
+          mob.standCounter = 0;
+          mob.standing = false;
+        }
+      } else if (this.horseStandsLocally() && mob.standCounter > 0 && ++mob.standCounter > 20) {
+        mob.standCounter = 0;
+        mob.standing = false;
+      }
+      if (!mob.standing) mob.allowStandSliding = false;
+    }
 
     // Camel.tick, after the move: the dash ends on landing, its cooldown runs down
     if (mob.type === "camel") {
@@ -250,9 +265,16 @@ export class RiddenMobPhysics extends BotcraftPhysics {
    */
   riderJump(mob: RiddenMobState, power: number) {
     if (HORSE_TYPES.has(mob.type)) {
-      // AbstractHorse.onPlayerJump: a charge lets a rearing horse move, and jumps at its next tick on the ground
+      // AbstractHorse.onPlayerJump: a charge lets a rearing horse move and rears it where the client runs its AI
+      // (standIfPossible), and jumps at its next tick on the ground
       const f32 = Math.fround;
-      if (power >= 0) mob.allowStandSliding = true;
+      if (power >= 0) {
+        mob.allowStandSliding = true;
+        if (this.horseStandsLocally()) {
+          mob.standing = true;
+          mob.standCounter = this.verLessThan("1.21.6") ? 1 : 20;
+        }
+      }
       const percent = Math.max(0, power);
       mob.jumpPendingScale = percent >= 90 ? 1 : f32(f32(0.4) + f32(f32(f32(0.4) * percent) / f32(90)));
       return;
@@ -261,6 +283,15 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     const f32 = Math.fround;
     const percent = Math.max(0, power);
     mob.jumpPendingScale = percent >= 90 ? 1 : f32(f32(0.4) + f32(f32(f32(0.4) * percent) / f32(90)));
+  }
+
+  /**
+   * Whether the client runs the ridden horse's rearing (AbstractHorse.standIfPossible and its counter): the locally
+   * controlled horse before 1.19.4; 1.19.4 - 1.21.4 only the server (isEffectiveAi); from 1.21.5 the client that moves
+   * the horse (isEffectiveAi is isLocalInstanceAuthoritative).
+   */
+  private horseStandsLocally(): boolean {
+    return this.verLessThan("1.19.4") || !this.verLessThan("1.21.5");
   }
 
   /**

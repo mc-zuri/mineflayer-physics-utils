@@ -52,3 +52,37 @@ describe("RiddenMobPhysics horse", () => {
     });
   }
 });
+
+// v_horse_running_jump: the rider lets go of its jump at tick 26, the horse jumps at tick 27, the server has it rear
+// from tick 28 (its flags) until after it lands at tick 44. A horse that rears does not move on the ground unless the
+// rider's jump let it, and once it does not rear that ends (AbstractHorse.tick): on 1.21.3 the client does not rear the
+// horse itself (isEffectiveAi), so the tick it jumps ends it and the horse stops at tick 45; on 1.21.11 the rider's
+// jump rears it on the client (standIfPossible) and it keeps moving.
+describe("RiddenMobPhysics horse rearing", () => {
+  const LANDING = {
+    "1.21.3": { y: 101, at44: [18.416219133901592, 0.22711509435756969], at45: [18.63879192637201, 0.12152475880426844] },
+    "1.21.11": { y: 102, at44: [19.421812636230825, 0.27539855341395597], at45: [19.917711188095062, 0.2707606407674322] },
+  };
+
+  for (const [version, { y, at44, at45 }] of Object.entries(LANDING)) {
+    it(`lands rearing and ${version === "1.21.3" ? "stops" : "keeps moving"} (${version}, v_horse_running_jump tick 45)`, () => {
+      const world = createFlatWorld(version, y);
+      const rig = createRiddenMobRig({ version, type: "horse", pos: [at44[0], y, 2173.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+      const { physics, state, ctx } = rig;
+      state.movementSpeed = 0.225;
+      state.jumpStrength = 0.7;
+      const rider = { yawDegrees: 270, pitchDegrees: 0, xxa: 0, zza: 0.9800000190734863 };
+      // the release and the jump
+      physics.riderJump(state, 90);
+      physics.simulateRidden(ctx, world as any, rider);
+      // the landing, as recorded, with the server's rearing
+      state.pos.set(at44[0], y, 2173.5);
+      state.vel.set(at44[1], -0.0784000015258789, 0);
+      state.onGround = true;
+      state.standing = true;
+      physics.simulateRidden(ctx, world as any, rider);
+      expect(state.pos.x).toBe(at45[0]);
+      expect(state.vel.x).toBe(at45[1]);
+    });
+  }
+});
