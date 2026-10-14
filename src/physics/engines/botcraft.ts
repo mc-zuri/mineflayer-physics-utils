@@ -570,7 +570,7 @@ export class BotcraftPhysics implements IPhysics {
           }
 
           // FluidState.getHeight: 1 under the same fluid from 1.14, else the float own height (amount / 9F); the
-          // top is the float y + height
+          // top is the float y + height, in double from 26.1 (EntityFluidInteraction.update)
           let fluidHeight = 0.0;
           const blockAbv = world.getBlock(blockPos.offset(0, 1, 0));
           const sameAbove = (blockAbv != null && waterCond(blockAbv) && waterRes) || (lavaCond(blockAbv) && lavaRes);
@@ -579,7 +579,7 @@ export class BotcraftPhysics implements IPhysics {
           } else {
             fluidHeight = this.ownFluidHeight(block);
           }
-          const top = Math.fround(blockPos.y + fluidHeight);
+          const top = this.verLessThan("26.1") ? Math.fround(blockPos.y + fluidHeight) : blockPos.y + fluidHeight;
 
           if (top < minAABB.y) {
             continue;

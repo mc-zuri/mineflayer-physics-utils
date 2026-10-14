@@ -4,14 +4,19 @@ import { Vec3 } from "vec3";
 import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
 
 // Entity.updateFluidHeightAndDoFluidPushing (1.13+) takes the water's top as the float y + height (the float own
-// height amount / 9F), and in water shallower than 0.4 scales each block's current by that depth.
+// height amount / 9F), and in water shallower than 0.4 scales each block's current by that depth. 26.1's
+// EntityFluidInteraction.update adds the height in double, above the box's own bottom.
 // Recorded as b_flow_walk_against: walking west (yaw 90) against the current of a shallow water stream (levels 4 - 7
 // down to the east), tick 2.
-const recorded = ["1.20.4", "1.21.11"];
+const recorded = [
+  { version: "1.20.4", x: 9.456317099221707, velX: -0.02286632100866919 },
+  { version: "1.21.11", x: 9.456317099221707, velX: -0.02286632100866919 },
+  { version: "26.1", x: 9.456331111112833, velX: -0.022855111495600794 },
+];
 
 describe("Botcraft fluid height and push", () => {
-  for (const version of recorded) {
-    it(`scales the current by the float depth (${version}, b_flow_walk_against)`, () => {
+  for (const { version, x, velX } of recorded) {
+    it(`scales the current by the depth (${version}, b_flow_walk_against)`, () => {
       const rig = createBotcraftPlayerRig({ version, position: new Vec3(9.484900000056625, 101, 1881.5), groundLevel: 101 });
       const world = createFlatWorld(version, 101);
       const { water, stone } = rig.mcData.blocksByName;
@@ -31,8 +36,8 @@ describe("Botcraft fluid height and push", () => {
 
       rig.physics.simulate(rig.playerCtx, world as any);
 
-      expect(state.pos.x).toBe(9.456317099221707);
-      expect(state.vel.x).toBe(-0.02286632100866919);
+      expect(state.pos.x).toBe(x);
+      expect(state.vel.x).toBe(velX);
     });
   }
 });
