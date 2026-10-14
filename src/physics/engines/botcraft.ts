@@ -362,6 +362,9 @@ export class BotcraftPhysics implements IPhysics {
       this.applyFireworkBoost(entity, entity.fireworkRocketsBeforePlayer);
     }
 
+    // Player.tick: a spectator is never on the ground (it moves without physics)
+    if (playerFlag && entity instanceof PlayerState && entity.gameMode === "spectator") entity.onGround = false;
+
     this.tickStartPos = ctx.state.pos.clone();
     this.recordedMove = null;
     // LivingEntity.getScale (1.20.5+): the dimensions follow the synced scale attribute (refreshDimensions)
