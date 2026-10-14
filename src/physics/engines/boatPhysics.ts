@@ -73,6 +73,9 @@ export class BoatPhysics extends EntityPhysics {
     const swept = bb.clone().extend(want.x, want.y, want.z);
     const nearby = this.getSurroundingBBs(swept, world);
     const colliders = this.data.version["<"]("1.18") ? nearby : nearby.filter((block) => block.intersects(swept));
+    // 1.14 - 1.17 Entity.collide adds the world border while the boat is inside it: a collider always there, so a
+    // motion under 1.0E-7 always stays
+    if (!this.data.version["<"]("1.14") && this.data.version["<"]("1.18")) colliders.push(...this.worldBorderColliders(bb));
     const epsilon = !this.data.version["<"]("1.13");
     const along = (axis: "x" | "y" | "z", d: number) => {
       if (d === 0) return 0;
@@ -122,6 +125,23 @@ export class BoatPhysics extends EntityPhysics {
     if (blockedX) state.vel.x = 0;
     if (blockedZ) state.vel.z = 0;
     if (state.isCollidedVertically) state.vel.y = 0;
+  }
+
+  /**
+   * The default world border (centre 0, 0, size 5.9999968E7, block-aligned) as the boxes outside it, unless the box,
+   * deflated by 1e-7, already reaches outside (Entity.collide, 1.14 - 1.17).
+   */
+  private worldBorderColliders(bb: AABB): AABB[] {
+    const max = 29999984;
+    const e = 1e-7;
+    if (bb.minX + e < -max || bb.maxX - e > max || bb.minZ + e < -max || bb.maxZ - e > max) return [];
+    const inf = Infinity;
+    return [
+      new AABB(-inf, -inf, -inf, -max, inf, inf),
+      new AABB(max, -inf, -inf, inf, inf, inf),
+      new AABB(-inf, -inf, -inf, inf, inf, -max),
+      new AABB(-inf, -inf, max, inf, inf, inf),
+    ];
   }
 
   /** Before 1.17 an entity keeps its own box: Entity.move moves it and places the entity from it. */
