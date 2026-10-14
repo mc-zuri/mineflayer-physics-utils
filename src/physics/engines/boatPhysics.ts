@@ -298,33 +298,38 @@ export class BoatPhysics extends EntityPhysics {
     return f32((level >= 8 ? 8 : 8 - level) / 9);
   }
 
+  /**
+   * Boat.floatBoat: gravity, the status's friction (a float), and buoyancy toward the water level, in double
+   * arithmetic. Before 1.20.5 gravity is the float 0.04F and buoyancy 0.06153846016296973 per unit; since, the double
+   * 0.04 (getDefaultGravity) and 0.04 / 0.65. Entering water from the air lifts the boat onto it (since 1.21 only
+   * where it fits).
+   */
   private floatBoat(
     simCtx: EPhysicsCtx,
     state: BoatState,
     world: PhysicsWorld,
     cfg: BoatPhysicsSettings,
   ): void {
-    let gravity = -cfg.gravity;
+    const f32 = Math.fround;
+    const doubleGravity = !this.data.version["<"]("1.20.5");
+    let gravity = doubleGravity ? -0.04 : -0.03999999910593033;
     let buoyancy = 0;
-    let invFriction = cfg.fallbackInvFriction;
+    let invFriction = f32(0.05);
 
     if (
       state.previousStatus === BoatStatus.IN_AIR &&
       state.status !== BoatStatus.IN_AIR &&
       state.status !== BoatStatus.ON_LAND
     ) {
+      const height = f32(state.height);
+      state.waterLevel = state.pos.y + height;
       const bb = this.getBoatBB(simCtx, state);
-      state.waterLevel = bb.maxY;
       const waterLevelAbove = this.getWaterLevelAbove(bb, state.lastVerticalVelocity, world);
-      const targetY = waterLevelAbove - state.height + cfg.waterEntryYOffset;
-      const useCollisionGuard = this.supportFeature("boatWaterEntryCollisionGuard");
-      const targetPos = { x: state.pos.x, y: targetY, z: state.pos.z };
-      const targetBB = this.getEntityBB(simCtx, targetPos);
-      const hasSolidCollision = this.getSurroundingBBs(targetBB, world).some((solidBB) =>
-        this.hasSolidCollision(targetBB, solidBB),
-      );
-      const canReposition = !useCollisionGuard || !hasSolidCollision;
-      if (canReposition) {
+      const targetY = f32(waterLevelAbove - height) + cfg.waterEntryYOffset;
+      const guarded = !this.data.version["<"]("1.21");
+      const targetBB = this.getEntityBB(simCtx, { x: state.pos.x, y: targetY, z: state.pos.z });
+      const fits = !this.getSurroundingBBs(targetBB, world).some((solidBB) => this.hasSolidCollision(targetBB, solidBB));
+      if (!guarded || fits) {
         state.pos.y = targetY;
         state.vel.y = 0;
         state.lastVerticalVelocity = 0;
@@ -335,37 +340,36 @@ export class BoatPhysics extends EntityPhysics {
 
     switch (state.status) {
       case BoatStatus.IN_WATER:
-        buoyancy = (state.waterLevel - state.pos.y) / state.height;
-        invFriction = cfg.inWaterInvFriction;
+        buoyancy = (state.waterLevel - state.pos.y) / f32(state.height);
+        invFriction = f32(0.9);
         break;
       case BoatStatus.UNDER_FLOWING_WATER:
-        gravity = cfg.flowingWaterVerticalAccel;
-        invFriction = cfg.underFlowingWaterInvFriction;
+        gravity = -7.0e-4;
+        invFriction = f32(0.9);
         break;
       case BoatStatus.UNDER_WATER:
-        buoyancy = cfg.buoyancyUnderWater;
-        invFriction = cfg.underWaterInvFriction;
+        buoyancy = 0.009999999776482582;
+        invFriction = f32(0.45);
         break;
       case BoatStatus.IN_AIR:
-        invFriction = cfg.inAirInvFriction;
+        invFriction = f32(0.9);
         break;
       case BoatStatus.ON_LAND:
         invFriction = state.landFriction;
         if (state.controllingPlayer) {
-          state.landFriction /= cfg.controlledLandFrictionDivisor;
+          state.landFriction = f32(state.landFriction / 2);
         }
         break;
     }
 
-    state.vel.x = Math.fround(state.vel.x * invFriction);
-    state.vel.y = Math.fround(state.vel.y + gravity);
-    state.vel.z = Math.fround(state.vel.z * invFriction);
-    state.yawVelocity = Math.fround(state.yawVelocity * invFriction);
+    state.vel.x = state.vel.x * invFriction;
+    state.vel.y = state.vel.y + gravity;
+    state.vel.z = state.vel.z * invFriction;
+    state.yawVelocity = f32(state.yawVelocity * invFriction);
 
     if (buoyancy > 0) {
-      state.vel.y = Math.fround(
-        (state.vel.y + buoyancy * (cfg.gravity / cfg.buoyancyGravityDivisor)) * cfg.buoyancyDamping,
-      );
+      const perUnit = doubleGravity ? 0.04 / 0.65 : 0.06153846016296973;
+      state.vel.y = (state.vel.y + buoyancy * perUnit) * 0.75;
     }
   }
 
