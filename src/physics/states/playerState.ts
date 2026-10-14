@@ -354,6 +354,8 @@ export class PlayerState implements IEntityState {
         this.flyJumpTriggerTime = (bot as any).flyJumpTriggerTime ?? 0;
         this.sprintTriggerTime = (bot as any).sprintTriggerTime ?? 0;
         this.autoJumpTime = (bot as unknown as { autoJumpTime?: number }).autoJumpTime ?? 0;
+        // the client's auto-jump option, for a bot: bot.physics.autoJump (off unless set)
+        this.autoJumpEnabled = !!(bot as unknown as { physics?: { autoJump?: boolean } }).physics?.autoJump;
 
         // Input only (not modified)
         this.attributes = bot.entity.attributes;

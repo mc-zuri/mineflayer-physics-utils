@@ -29,6 +29,16 @@ function walkToStep(version: string, autoJump: boolean) {
 }
 
 describe("Botcraft auto-jump", () => {
+  // a bot turns the option on with bot.physics.autoJump, which PlayerState.update reads
+  it("takes the auto-jump option from bot.physics.autoJump", () => {
+    const rig = createBotcraftPlayerRig({ version: "1.21.11", position: new Vec3(0.5, groundLevel, 0.5), groundLevel });
+    rig.playerState.update(rig.fakePlayer, rig.playerState.control);
+    expect(rig.playerState.autoJumpEnabled).toBe(false);
+    rig.fakePlayer.physics = { autoJump: true };
+    rig.playerState.update(rig.fakePlayer, rig.playerState.control);
+    expect(rig.playerState.autoJumpEnabled).toBe(true);
+  });
+
   for (const version of Object.keys(recorded)) {
     it(`jumps up a step the player walks into with auto-jump on (${version})`, () => {
       const state = walkToStep(version, true);
