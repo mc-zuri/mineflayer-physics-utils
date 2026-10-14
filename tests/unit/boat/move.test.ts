@@ -123,3 +123,22 @@ describe("Boat move into the shore", () => {
     });
   }
 });
+
+// v_boat_dismount tick 4 on 1.14.4: 1.14 - 1.16 still keep the entity's own box and place it from the moved box
+// (Entity.setLocationFromBoundingbox), so the position is the box's centre, not the position plus the motion.
+describe("Boat move with its own box (1.14 - 1.16)", () => {
+  it("places the boat from its moved box (1.14.4, v_boat_dismount tick 4)", () => {
+    const rig = boatOnPool("1.14.4", 100.52329062800678, -0.000024499169649019534);
+    const state = rig.boatState;
+    state.pos.x = 0.6159999964535237;
+    state.vel = new Vec3(0.07599999734759333, -0.000024499169649019534, 0);
+    state.box = new AABB(-0.07150000354647634, 100.52329062800678, 2124.8125, 1.3034999964535237, 101.08579062800678, 2126.1875);
+    state.setYawDegrees(270);
+    state.control.forward = true;
+
+    simulateBoatTick(rig);
+
+    expect(state.pos.x).toBe(0.7243999913603067);
+    expect(state.pos.y).toBe(100.52326978142776);
+  });
+});

@@ -60,9 +60,9 @@ export class BoatPhysics extends EntityPhysics {
 
   /**
    * Entity.move for the boat (no step): the motion collided with the blocks, y first, then x and z (from 1.14 the
-   * larger of the two first; from 1.13 an axis under 1.0E-7 that meets a block stays). Before 1.14 the position
-   * is the moved box's (centre x / z, bottom y); 1.14 - 1.21.1 move only by more than 1.0E-7 squared, 1.21.2+ also
-   * when nothing blocked the motion. A blocked horizontal axis stops (1.14+ beyond Mth.equal's 1.0E-5F), and a
+   * larger of the two first; from 1.13 an axis under 1.0E-7 that meets a block stays); 1.14 - 1.21.1 move only by
+   * more than 1.0E-7 squared, 1.21.2+ also when nothing blocked the motion. Before 1.17 the position is the moved
+   * box's (centre x / z, bottom y). A blocked horizontal axis stops (1.14+ beyond Mth.equal's 1.0E-5F), and a
    * blocked vertical motion lands.
    */
   private move(simCtx: EPhysicsCtx, state: BoatState, world: PhysicsWorld): void {
@@ -96,16 +96,17 @@ export class BoatPhysics extends EntityPhysics {
       moved.z = along("z", want.z);
     }
 
-    if (legacy) {
-      state.box = bb;
-      state.pos.x = (bb.minX + bb.maxX) / 2;
-      state.pos.y = bb.minY;
-      state.pos.z = (bb.minZ + bb.maxZ) / 2;
-    } else {
-      const movedSqr = moved.x * moved.x + moved.y * moved.y + moved.z * moved.z;
-      const wantSqr = want.x * want.x + want.y * want.y + want.z * want.z;
-      const unblocked = !this.data.version["<"]("1.21.2") && wantSqr - movedSqr < 1.0e-7;
-      if (movedSqr > 1.0e-7 || unblocked) {
+    const movedSqr = moved.x * moved.x + moved.y * moved.y + moved.z * moved.z;
+    const wantSqr = want.x * want.x + want.y * want.y + want.z * want.z;
+    const unblocked = !this.data.version["<"]("1.21.2") && wantSqr - movedSqr < 1.0e-7;
+    if (legacy || movedSqr > 1.0e-7 || unblocked) {
+      if (this.keepsBox()) {
+        // (setLocationFromBoundingbox: the position from the moved box)
+        state.box = bb;
+        state.pos.x = (bb.minX + bb.maxX) / 2;
+        state.pos.y = bb.minY;
+        state.pos.z = (bb.minZ + bb.maxZ) / 2;
+      } else {
         state.pos.x += moved.x;
         state.pos.y += moved.y;
         state.pos.z += moved.z;
@@ -123,9 +124,14 @@ export class BoatPhysics extends EntityPhysics {
     if (state.isCollidedVertically) state.vel.y = 0;
   }
 
-  /** The boat's box: before 1.14 the entity's own (moved box by box, the position follows it), else around the position. */
+  /** Before 1.17 an entity keeps its own box: Entity.move moves it and places the entity from it. */
+  private keepsBox(): boolean {
+    return this.data.version["<"]("1.17");
+  }
+
+  /** The boat's box: before 1.17 the entity's own (moved box by box, the position follows it), else around the position. */
   private getBoatBB(simCtx: EPhysicsCtx, state: BoatState): AABB {
-    if (state.box && this.data.version["<"]("1.14")) return state.box.clone();
+    if (state.box && this.keepsBox()) return state.box.clone();
     return this.getEntityBB(simCtx, state.pos);
   }
 

@@ -24,7 +24,7 @@ export class BoatState extends EntityState {
   yawVelocity = 0;
   /** The yaw as vanilla holds it (Entity.yRot): float degrees, whole turns kept. */
   yawDegrees: number;
-  /** Before 1.14 the entity's own box, which moves and places the boat (unset: the box around the position). */
+  /** Before 1.17 the entity's own box, which moves and places the boat (unset: the box around the position). */
   box?: AABB;
   lastVerticalVelocity = 0;
   controllingPlayer = false;
