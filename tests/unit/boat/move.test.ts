@@ -42,3 +42,30 @@ describe("Boat move", () => {
     expect(rig.boatState.pos.z).toBe(2125.4995803332063);
   });
 });
+
+// v_boat_onto_land: the boat rests against the shore (its box ends at x 25, the stone's face). From 1.18 Entity.collide
+// gathers only the shapes that meet the box swept along the motion, so the touching stone leaves the boat's tiny
+// vertical motion alone: 1.21.11 sinks by 5.1e-11 (tick 82); 1.20.4 keeps the motion though it does not move by it.
+const atTheShore = [
+  { version: "1.21.11", entityName: "oak_boat", y: 100.52326049866933, velY: 0, nextY: 100.52326049861826, nextVelY: -5.107326020437064e-11 },
+  { version: "1.20.4", entityName: "boat", y: 100.52326348459798, velY: -9.802013090105116e-7, nextY: 100.52326348459798, nextVelY: -9.802013230305467e-7 },
+];
+
+describe("Boat move against the shore", () => {
+  for (const { version, entityName, y, velY, nextY, nextVelY } of atTheShore) {
+    it(`keeps a tiny vertical motion beside a block it only touches (${version}, v_boat_onto_land)`, () => {
+      const rig = createBoatRig({ version, position: new Vec3(24.3125, y, 2125.5), floorY: 99, entityName });
+      for (let z = 2123; z <= 2128; z++) {
+        for (let x = 21; x <= 24; x++) fillWaterColumn(rig.world, x, z, 99, 100);
+        for (let x = 25; x <= 27; x++) rig.world.setStone(new Vec3(x, 100, z));
+      }
+      rig.boatState.vel = new Vec3(0, velY, 0);
+      rig.boatState.status = rig.boatState.previousStatus = BoatStatus.IN_WATER;
+
+      simulateBoatTick(rig);
+
+      expect(rig.boatState.vel.y).toBe(nextVelY);
+      expect(rig.boatState.pos.y).toBe(nextY);
+    });
+  }
+});

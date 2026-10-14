@@ -59,7 +59,10 @@ export class BoatPhysics extends EntityPhysics {
     const legacy = this.data.version["<"]("1.14");
     const want = { x: state.vel.x, y: state.vel.y, z: state.vel.z };
     const bb = this.getBoatBB(simCtx, state);
-    const colliders = this.getSurroundingBBs(bb.clone().extend(want.x, want.y, want.z), world);
+    // (from 1.18 only the shapes that meet the box swept along the motion: a block it only touches does not count)
+    const swept = bb.clone().extend(want.x, want.y, want.z);
+    const nearby = this.getSurroundingBBs(swept, world);
+    const colliders = this.data.version["<"]("1.18") ? nearby : nearby.filter((block) => block.intersects(swept));
     const along = (axis: "x" | "y" | "z", d: number) => {
       if (d === 0) return 0;
       if (colliders.length > 0 && !legacy && Math.abs(d) < 1.0e-7) return 0;
