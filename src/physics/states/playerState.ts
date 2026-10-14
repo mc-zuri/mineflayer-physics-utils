@@ -17,7 +17,7 @@ import { ControlStateHandler } from "../player/playerControls";
 import { IEntityState, NearbyEntity } from "./iEntityState";
 import { IPhysics } from "../engines/IPhysics";
 import type { Entity } from "prismarine-entity";
-import { PlayerPoses, getCollider, playerPoseCtx } from "./poses";
+import { PlayerPoses, getCollider, playerPoseSize } from "./poses";
 import { Heading, getPose } from "./entityPose";
 
 
@@ -115,6 +115,8 @@ export class PlayerState implements IEntityState {
     public supportingBlockPos: Vec3 | null = null;
     /** Entity.fallDistance: how far the player has fallen since it was last on ground (or reset). */
     public fallDistance: number = 0;
+    /** LivingEntity.getScale: the scale attribute (1.20.5+), which sizes the player's box and eyes. */
+    public scale: number = 1;
     /**
      * Before 1.17: the bounding box vanilla keeps across ticks (the engine's last move left it here), with the position
      * and size it was left with. The engine starts from it while pos is still that position, else builds it from pos.
@@ -234,10 +236,15 @@ export class PlayerState implements IEntityState {
     }
 
     public get height(): number {
-        return playerPoseCtx[this.pose].height;
+        return playerPoseSize(this.pose, this.scale).height;
     }
 
     public get eyeHeight(): number {
+        const eyeHeight = this.unscaledEyeHeight;
+        return this.scale === 1 || this.pose === PlayerPoses.SLEEPING ? eyeHeight : Math.fround(Math.fround(eyeHeight) * this.scale);
+    }
+
+    private get unscaledEyeHeight(): number {
         switch (this.pose) {
             case PlayerPoses.STANDING:
                 return 1.62;
@@ -255,7 +262,7 @@ export class PlayerState implements IEntityState {
     }
 
     public get halfWidth(): number {
-        return playerPoseCtx[this.pose].width / 2;
+        return playerPoseSize(this.pose, this.scale).width / 2;
     }
 
     public readonly ctx: IPhysics;
@@ -450,6 +457,7 @@ export class PlayerState implements IEntityState {
         tmp.isCollidedVertically = this.isCollidedVertically;
         tmp.supportingBlockPos = this.supportingBlockPos;
         tmp.fallDistance = this.fallDistance;
+        tmp.scale = this.scale;
         tmp.keptBoundingBox = this.keptBoundingBox;
         tmp.nearbyEntities = this.nearbyEntities;
 
@@ -530,6 +538,7 @@ export class PlayerState implements IEntityState {
         this.isCollidedVertically = other.isCollidedVertically;
         this.supportingBlockPos = other.supportingBlockPos;
         this.fallDistance = other.fallDistance;
+        this.scale = other.scale;
         this.keptBoundingBox = other.keptBoundingBox;
         this.nearbyEntities = other.nearbyEntities;
 

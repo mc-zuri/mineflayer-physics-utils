@@ -65,6 +65,7 @@ export class BotcraftPhysics implements IPhysics {
   public waterMovementEfficiencyAttribute: string;
   public stepHeightAttribute: string;
   public gravityAttribute: string;
+  public scaleAttribute: string;
   public sneakingSpeedAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
@@ -108,6 +109,7 @@ export class BotcraftPhysics implements IPhysics {
     this.waterMovementEfficiencyAttribute = extractAttribute(this, "waterMovementEfficiency");
     this.stepHeightAttribute = extractAttribute(this, "stepHeight");
     this.gravityAttribute = extractAttribute(this, "gravity");
+    this.scaleAttribute = extractAttribute(this, "scale");
     // 1.21 - 1.21.1 player.sneaking_speed, then sneaking_speed
     this.sneakingSpeedAttribute = extractAttribute(this, "playerSneakingSpeed") ?? extractAttribute(this, "sneakingSpeed");
 
@@ -359,6 +361,12 @@ export class BotcraftPhysics implements IPhysics {
 
     this.tickStartPos = ctx.state.pos.clone();
     this.recordedMove = null;
+    // LivingEntity.getScale (1.20.5+): the dimensions follow the synced scale attribute (refreshDimensions)
+    if (entity instanceof PlayerState) {
+      const synced = this.verLessThan("1.20.5") ? undefined : entity.attributes?.[this.scaleAttribute];
+      entity.scale = synced ? Math.fround(this.attributeValue(this.scaleAttribute, synced)) : 1;
+    }
+
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
     if (!this.verLessThan("1.13") && ctx.state instanceof PlayerState) this.updateFluidOnEyes(ctx.state, world);
@@ -417,7 +425,7 @@ export class BotcraftPhysics implements IPhysics {
    */
   private updatePoses(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
-    const swimPose = getCollider(PlayerPoses.SWIMMING, player.pos).expand(-1e-7, -1e-7, -1e-7);
+    const swimPose = getCollider(PlayerPoses.SWIMMING, player.pos, player.scale).expand(-1e-7, -1e-7, -1e-7);
     if (this.worldIsFree(world, swimPose, true)) {
       // update poses
       let currentPose: PlayerPoses;
@@ -442,11 +450,11 @@ export class BotcraftPhysics implements IPhysics {
         currentPose = PlayerPoses.STANDING;
       }
 
-      const poseBB = getCollider(currentPose, player.pos).expand(-1e-7, -1e-7, -1e-7);
+      const poseBB = getCollider(currentPose, player.pos, player.scale).expand(-1e-7, -1e-7, -1e-7);
       if (player.gameMode === "spectator" || this.worldIsFree(world, poseBB, true)) {
         player.pose = currentPose;
       } else {
-        const crouchBB = getCollider(PlayerPoses.SNEAKING, player.pos).expand(-1e-7, -1e-7, -1e-7);
+        const crouchBB = getCollider(PlayerPoses.SNEAKING, player.pos, player.scale).expand(-1e-7, -1e-7, -1e-7);
         if (this.worldIsFree(world, crouchBB, true)) {
           player.pose = PlayerPoses.SNEAKING;
         } else {
@@ -458,7 +466,7 @@ export class BotcraftPhysics implements IPhysics {
 
   private fluidPhysics(ctx: EPhysicsCtx, world: World, water: boolean) {
     const player = ctx.state as PlayerState;
-    const aabb = getCollider(player.pose, player.pos).expand(-1e-3, -1e-3, -1e-3); // -0.001
+    const aabb = getCollider(player.pose, player.pos, player.scale).expand(-1e-3, -1e-3, -1e-3); // -0.001
     if (water) {
       player.isInWater = false;
       if (this.verLessThan("1.13")) {
@@ -985,8 +993,8 @@ export class BotcraftPhysics implements IPhysics {
   private inputsToCrouch(ctx: EPhysicsCtx, heading: Heading, world: World) {
     const player = ctx.state as PlayerState;
     if (this.verGreaterThan("1.13.2")) {
-      const sneakBb = getCollider(PlayerPoses.SNEAKING, player.pos);
-      const standBb = getCollider(PlayerPoses.STANDING, player.pos);
+      const sneakBb = getCollider(PlayerPoses.SNEAKING, player.pos, player.scale);
+      const standBb = getCollider(PlayerPoses.STANDING, player.pos, player.scale);
       sneakBb.expand(-1e-7, -1e-7, -1e-7);
       standBb.expand(-1e-7, -1e-7, -1e-7);
 
