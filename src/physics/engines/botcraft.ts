@@ -461,7 +461,10 @@ export class BotcraftPhysics implements IPhysics {
     const aabb = getCollider(player.pose, player.pos).expand(-1e-3, -1e-3, -1e-3); // -0.001
     if (water) {
       player.isInWater = false;
-      if (this.verLessThan("1.13")) player.isUnderWater = false; // 1.13+: updateFluidOnEyes
+      if (this.verLessThan("1.13")) {
+        this.handleWaterMovementLegacy(player, world);
+        return;
+      }
     } else {
       player.isInLava = false;
       player.isUnderLava = false;
@@ -606,6 +609,46 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     return flow.normalize();
+  }
+
+  /**
+   * Entity.handleWaterMovement before 1.13: World.handleMaterialAcceleration over the box shrunk by 0.4F vertically
+   * and 0.001 all round. A water block (any level) counts when ceil(box maxY) reaches its float top
+   * (y + 1 - (level + 1) / 9F); the flows of the counted blocks are summed and normalized (float square root), and
+   * push by 0.014. The eyes are in water (isInsideOfMaterial) below the water top plus 0.11111111F.
+   */
+  private handleWaterMovementLegacy(player: PlayerState, world: World) {
+    const f32 = Math.fround;
+    const isWater = (block: Block | null) => block != null && (block.type === this.waterId || block.name === "flowing_water");
+    const heightPercent = (block: Block) => f32(((block.metadata >= 8 ? 0 : block.metadata) + 1) / 9);
+    const bb = getCollider(player.pose, player.pos).expand(-0.001, -f32(0.4) - 0.001, -0.001);
+    const maxY = Math.ceil(bb.maxY);
+    const flow = new Vec3(0, 0, 0);
+    const cursor = new Vec3(0, 0, 0);
+    let inWater = false;
+    for (cursor.x = Math.floor(bb.minX); cursor.x < Math.ceil(bb.maxX); cursor.x++) {
+      for (cursor.y = Math.floor(bb.minY); cursor.y < maxY; cursor.y++) {
+        for (cursor.z = Math.floor(bb.minZ); cursor.z < Math.ceil(bb.maxZ); cursor.z++) {
+          const block = world.getBlock(cursor);
+          if (block == null || !isWater(block)) continue;
+          if (maxY >= f32(cursor.y + 1 - heightPercent(block))) {
+            inWater = true;
+            flow.add(this.getFlow(block, world));
+          }
+        }
+      }
+    }
+    player.isInWater = inWater;
+    const length = f32(Math.sqrt(flow.x * flow.x + flow.y * flow.y + flow.z * flow.z));
+    if (length >= 1e-4 && !player.flying) {
+      player.vel.x += (flow.x / length) * 0.014;
+      player.vel.y += (flow.y / length) * 0.014;
+      player.vel.z += (flow.z / length) * 0.014;
+    }
+    const eyeY = player.pos.y + player.eyeHeight;
+    const eyeBlock = world.getBlock(new Vec3(player.pos.x, eyeY, player.pos.z));
+    player.isUnderWater =
+      eyeBlock != null && isWater(eyeBlock) && eyeY < f32(eyeBlock.position.y + 1 - f32(heightPercent(eyeBlock) - f32(0.11111111)));
   }
 
   /**
