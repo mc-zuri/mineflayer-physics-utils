@@ -1,10 +1,16 @@
+import { Block } from "prismarine-block";
 import { world } from "prismarine-world";
+import { Vec3 } from "vec3";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { RiddenMobState } from "../states/riddenMobState";
 import { BotcraftPhysics } from "./botcraft";
 
 type World = { getBlock: world.WorldSync["getBlock"] };
+type AABBPoints = [number, number, number, number, number, number];
+
+/** LiquidBlock.SHAPE_STABLE: the lower half of a fluid block, what a strider stands on. */
+const STABLE_FLUID_SHAPE: AABBPoints = [0, 0, 0, 1, 0.5, 1];
 
 /** What the riding player gives its mount each tick. */
 export interface RiderInput {
@@ -19,14 +25,19 @@ export interface RiderInput {
  * same LivingEntity.travel a player moves with, at the speed and with the input the mob takes from its rider.
  */
 export class RiddenMobPhysics extends BotcraftPhysics {
+  /** the world of the mob simulated, for the collision shapes that depend on the blocks around */
+  private colliderWorld: World | null = null;
+
   /** One client tick of the ridden mob in ctx (a RiddenMobState). */
   simulateRidden(ctx: EPhysicsCtx, world: World, rider: RiderInput): RiddenMobState {
     const mob = ctx.state as RiddenMobState;
     this.collider = mob;
+    this.colliderWorld = world;
     try {
       this.tickRiddenMob(ctx, world, rider);
     } finally {
       this.collider = null;
+      this.colliderWorld = null;
     }
     mob.lastOnGround = mob.onGround;
     mob.age++;
@@ -35,6 +46,9 @@ export class RiddenMobPhysics extends BotcraftPhysics {
 
   private tickRiddenMob(ctx: EPhysicsCtx, world: World, rider: RiderInput) {
     const mob = ctx.state as RiddenMobState;
+    // Strider.tick: the strider suffocates off the warm blocks (lava, by the fluid contact of the tick before)
+    if (mob.type === "strider") mob.suffocating = !this.isWarmForStrider(mob, world);
+
     // Entity.baseTick: the water and lava contact the move starts from
     this.fluidPhysics(ctx, world, true);
     this.fluidPhysics(ctx, world, false);
@@ -53,6 +67,17 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     this.tickRidden(mob, rider);
     const airSpeed = Math.fround((this.verLessThan("1.19.4") ? speedBefore : mob.riddenSpeed) * Math.fround(0.1));
     this.travelRiddenMob(ctx, world, airSpeed);
+
+    // Strider.floatStrider: in lava it stands on a still surface (STABLE_SHAPE) or floats up
+    if (mob.type === "strider" && mob.isInLava) {
+      const feet = mob.pos.floored();
+      if (this.isAboveStableFluid(mob, feet) && !this.isLava(world.getBlock(feet.offset(0, 1, 0)))) {
+        mob.onGround = true;
+      } else {
+        mob.vel.scale(0.5);
+        mob.vel.y += 0.05;
+      }
+    }
   }
 
   /**
@@ -77,9 +102,50 @@ export class RiddenMobPhysics extends BotcraftPhysics {
         }
         return;
       }
+      case "strider": {
+        // Strider.tickRidden: as the pig; getRiddenSpeed: MOVEMENT_SPEED (less 34% of its base while suffocating)
+        // * 0.55F, or 0.35F suffocating, * the boost factor
+        mob.yawDegrees = f32(f32(rider.yawDegrees) % 360);
+        this.tickBoost(mob);
+        mob.heading = { forward: 1, strafe: 0 };
+        const movementSpeed = mob.suffocating ? mob.movementSpeed + mob.movementSpeed * -0.3400000035762787 : mob.movementSpeed;
+        mob.riddenSpeed = f32(movementSpeed * f32(mob.suffocating ? 0.35 : 0.55) * this.boostFactor(mob));
+        return;
+      }
       default:
         throw new Error(`RiddenMobPhysics: ${mob.type} is not simulated yet`);
     }
+  }
+
+  /**
+   * Strider.tick: warm when the block at its feet or the one it stands on is in STRIDER_WARM_BLOCKS (lava) or it
+   * touched lava in the tick before.
+   */
+  private isWarmForStrider(mob: RiddenMobState, world: World): boolean {
+    return this.isLava(world.getBlock(mob.pos.floored())) || this.isLava(world.getBlock(this.getOnPosLegacy(mob, world))) || mob.isInLava;
+  }
+
+  private isLava(block: Block | null | undefined): boolean {
+    return block != null && block.type === this.lavaId;
+  }
+
+  /** EntityCollisionContext.isAbove: the entity's feet above the shape's top in the block, less 1e-5F. */
+  private isAboveStableFluid(mob: RiddenMobState, pos: Vec3): boolean {
+    return mob.pos.y > pos.y + STABLE_FLUID_SHAPE[4] - 9.999999747378752e-6;
+  }
+
+  /**
+   * LiquidBlock.getCollisionShape: a still lava block (LEVEL 0) under no lava is its lower half for a strider whose
+   * feet are above that (LivingEntity.canStandOnFluid).
+   */
+  protected collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
+    const mob = this.collider;
+    if (mob instanceof RiddenMobState && mob.type === "strider" && block.type === this.lavaId) {
+      const level = Number(block.getProperties().level ?? block.metadata);
+      const lavaAbove = this.isLava(this.colliderWorld?.getBlock(pos.offset(0, 1, 0)));
+      return level === 0 && !lavaAbove && this.isAboveStableFluid(mob, pos) ? [STABLE_FLUID_SHAPE] : [];
+    }
+    return super.collisionShapes(block, pos);
   }
 
   /** ItemBasedSteering.tickBoost: the boost ends once its time has run out. */
@@ -106,8 +172,10 @@ export class RiddenMobPhysics extends BotcraftPhysics {
   protected travelRiddenMob(ctx: EPhysicsCtx, world: World, airSpeed: number) {
     const mob = ctx.state as RiddenMobState;
     // the ridden step height: at least 1 (LivingEntity.maxUpStep with a player in control)
-    ctx.stepHeight = 1;
-    if (mob.isInWater || mob.isInLava) {
+    ctx.stepHeight = Math.max(mob.type === "camel" ? 1.5 : 0.6, 1);
+    // LivingEntity.shouldTravelInFluid: not in a fluid it stands on (a strider in lava)
+    const standsOnFluid = mob.type === "strider" && this.isLava(world.getBlock(mob.pos.floored()));
+    if ((mob.isInWater || mob.isInLava) && !standsOnFluid) {
       this.movePlayer(ctx, world);
       return;
     }

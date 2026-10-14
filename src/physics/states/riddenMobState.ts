@@ -45,6 +45,8 @@ export class RiddenMobState extends PlayerState {
   public boosting = false;
   public boostTime = 0;
   public boostTimeTotal = 0;
+  /** Strider: off the warm blocks (DATA_SUFFOCATING) */
+  public suffocating = false;
 
   constructor(ctx: IPhysics, init: RiddenMobInit) {
     super(ctx, fakeBot(init));

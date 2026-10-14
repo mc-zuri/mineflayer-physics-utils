@@ -245,7 +245,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /** The block's collision shapes where it is, for the player simulated. */
-  private collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
+  protected collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
     if (block.type === this.scaffoldId && this.collider) return this.scaffoldingShapes(block, this.collider) as AABBPoints[];
     if (block.type === this.powderSnowId && this.collider) return this.powderSnowShapes(pos, this.collider) as AABBPoints[];
     const maxOffset = this.offsetBlocks.get(block.type);
@@ -2524,7 +2524,7 @@ export class BotcraftPhysics implements IPhysics {
    * column (the supporting block itself when it is a fence, wall or fence gate); before, a fence, wall or fence gate
    * under an air block.
    */
-  private getOnPosLegacy(player: PlayerState, world: World): Vec3 {
+  protected getOnPosLegacy(player: PlayerState, world: World): Vec3 {
     const y = Math.floor(player.pos.y - 0.20000000298023224);
     const fenceLike = (block: Block | null) => block != null && /(^|_)fence$|_wall$|fence_gate$/.test(block.name);
     const support = player.supportingBlockPos;
