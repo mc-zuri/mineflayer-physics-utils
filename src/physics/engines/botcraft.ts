@@ -1339,7 +1339,7 @@ export class BotcraftPhysics implements IPhysics {
    * Entity.getLookAngle: the view vector from Mth.sin/cos of the float rotation. Before 1.13 getVectorForRotation
    * turned it by -yaw - PI and negated the pitch's cosine instead.
    */
-  private lookAngle(player: PlayerState): { x: number; y: number; z: number } {
+  protected lookAngle(player: PlayerState): { x: number; y: number; z: number } {
     const f32 = Math.fround;
     const degToRad = f32(0.017453292);
     const yaw = this.yawDegrees(player);
@@ -1707,7 +1707,7 @@ export class BotcraftPhysics implements IPhysics {
     return player.onGround || (inWater && height <= threshold) ? "ground" : "none";
   }
 
-  private getBlockJumpFactor(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {
+  protected getBlockJumpFactor(entity: IEntityState, world: World, worldSettings: PhysicsWorldSettings) {
     const feetBlock = world.getBlock(new Vec3(entity.pos.x, entity.pos.y, entity.pos.z));
     const feetJumpFactor = this.getKnownJumpFactor(feetBlock?.type, worldSettings);
     if (feetJumpFactor !== 1.0) return feetJumpFactor;
@@ -2561,7 +2561,7 @@ export class BotcraftPhysics implements IPhysics {
    * LivingEntity's: 1.16 - 1.20 ignore it on a soul speed block with Soul Speed; since 1.21 it is lerped toward 1 by
    * the movement efficiency attribute, in float.
    */
-  private getBlockSpeedFactor(player: PlayerState, world: World): number {
+  protected getBlockSpeedFactor(player: PlayerState, world: World): number {
     const f32 = Math.fround;
     const speedFactor = (block: Block | null) =>
       block != null && (block.type === this.soulsandId || block.type === this.honeyblockId) ? f32(0.4) : 1;

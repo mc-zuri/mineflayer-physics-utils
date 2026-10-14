@@ -47,6 +47,17 @@ export class RiddenMobState extends PlayerState {
   public boostTimeTotal = 0;
   /** Strider: off the warm blocks (DATA_SUFFOCATING) */
   public suffocating = false;
+  /** Camel (AbstractHorse): the JUMP_STRENGTH attribute's value, the dash the rider asked for (playerJumpPendingScale) */
+  public jumpStrength = 0.41999998688697815;
+  public jumpPendingScale = 0;
+  /** Camel: ticks until it can dash again, and whether it dashes (DASH) */
+  public dashCooldown = 0;
+  public dashing = false;
+  /** Camel: sitting, and the ticks since it last sat down or stood up (getPoseTime) */
+  public camelSitting = false;
+  public poseTime = 1000;
+  /** the mob's pitch in float degrees (the camel dashes along its look) */
+  public pitchDegrees = 0;
 
   constructor(ctx: IPhysics, init: RiddenMobInit) {
     super(ctx, fakeBot(init));

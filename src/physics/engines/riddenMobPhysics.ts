@@ -17,6 +17,10 @@ export interface RiderInput {
   /** the rider's yaw and pitch in float degrees, as vanilla holds them */
   yawDegrees: number;
   pitchDegrees: number;
+  /** the rider's xxa and zza (strafe and forward input after its last aiStep) and sprinting: what a camel reads */
+  xxa?: number;
+  zza?: number;
+  sprinting?: boolean;
 }
 
 /**
@@ -27,17 +31,20 @@ export interface RiderInput {
 export class RiddenMobPhysics extends BotcraftPhysics {
   /** the world of the mob simulated, for the collision shapes that depend on the blocks around */
   private colliderWorld: World | null = null;
+  private colliderCtx: EPhysicsCtx | null = null;
 
   /** One client tick of the ridden mob in ctx (a RiddenMobState). */
   simulateRidden(ctx: EPhysicsCtx, world: World, rider: RiderInput): RiddenMobState {
     const mob = ctx.state as RiddenMobState;
     this.collider = mob;
     this.colliderWorld = world;
+    this.colliderCtx = ctx;
     try {
       this.tickRiddenMob(ctx, world, rider);
     } finally {
       this.collider = null;
       this.colliderWorld = null;
+      this.colliderCtx = null;
     }
     mob.lastOnGround = mob.onGround;
     mob.age++;
@@ -67,6 +74,13 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     this.tickRidden(mob, rider);
     const airSpeed = Math.fround((this.verLessThan("1.19.4") ? speedBefore : mob.riddenSpeed) * Math.fround(0.1));
     this.travelRiddenMob(ctx, world, airSpeed);
+
+    // Camel.tick, after the move: the dash ends on landing, its cooldown runs down
+    if (mob.type === "camel") {
+      if (mob.dashing && mob.dashCooldown < 50 && (mob.onGround || mob.isInWater || mob.isInLava)) mob.dashing = false;
+      if (mob.dashCooldown > 0) mob.dashCooldown--;
+      mob.poseTime++;
+    }
 
     // Strider.floatStrider: in lava it stands on a still surface (STABLE_SHAPE) or floats up
     if (mob.type === "strider" && mob.isInLava) {
@@ -112,9 +126,76 @@ export class RiddenMobPhysics extends BotcraftPhysics {
         mob.riddenSpeed = f32(movementSpeed * f32(mob.suffocating ? 0.35 : 0.55) * this.boostFactor(mob));
         return;
       }
-      default:
-        throw new Error(`RiddenMobPhysics: ${mob.type} is not simulated yet`);
+      case "camel":
+        this.tickRiddenCamel(mob, rider);
+        return;
     }
+  }
+
+  /**
+   * The camel's travelRidden part (AbstractHorse, Camel): the input it takes (xxa * 0.5F, zza, a quarter of it
+   * backwards; none while it refuses to move), then tickRidden (turn to the rider, dash when the rider asked on the
+   * ground), and the speed (MOVEMENT_SPEED, + 0.1F while the rider sprints and it can dash).
+   */
+  private tickRiddenCamel(mob: RiddenMobState, rider: RiderInput) {
+    const f32 = Math.fround;
+    const refuseToMove = this.camelRefusesToMove(mob);
+    const xxa = f32(rider.xxa ?? 0);
+    const zza = f32(rider.zza ?? 0);
+    mob.heading = refuseToMove ? { forward: 0, strafe: 0 } : { forward: zza <= 0 ? f32(zza * f32(0.25)) : zza, strafe: f32(xxa * f32(0.5)) };
+    // AbstractHorse.tickRidden: setRot(rider yaw, rider pitch * 0.5F) unless it refuses to move
+    if (!refuseToMove) {
+      mob.yawDegrees = f32(f32(rider.yawDegrees) % 360);
+      mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
+      mob.pitch = -mob.pitchDegrees * (Math.PI / 180);
+    }
+    if (mob.onGround) {
+      if (mob.jumpPendingScale > 0) this.camelDash(mob, mob.jumpPendingScale);
+      mob.jumpPendingScale = 0;
+    }
+    // Camel.tickRidden: moving forward stands it up
+    if (zza > 0 && mob.camelSitting && !this.camelInPoseTransition(mob)) {
+      mob.camelSitting = false;
+      mob.poseTime = 0;
+    }
+    const sprintBonus = rider.sprinting && mob.dashCooldown === 0 ? f32(0.1) : 0;
+    mob.riddenSpeed = f32(f32(mob.movementSpeed) + sprintBonus);
+  }
+
+  /** Camel.executeRidersJump: a dash along its look, 22.2222F * scale * MOVEMENT_SPEED far and 1.4285F * scale high. */
+  private camelDash(mob: RiddenMobState, scale: number) {
+    const f32 = Math.fround;
+    // the jump power: in double before 1.20.5, LivingEntity.getJumpPower (float) since
+    const blockJumpFactor = this.getBlockJumpFactor(mob, this.colliderWorld!, this.colliderCtx!.worldSettings);
+    const jumpPower = this.verLessThan("1.20.5") ? mob.jumpStrength * blockJumpFactor : f32(f32(mob.jumpStrength) * blockJumpFactor);
+    const look = this.lookAngle(mob);
+    const length = Math.sqrt(look.x * look.x + look.z * look.z);
+    const horizontal = length < 1.0e-5 ? 0 : f32(f32(22.2222) * scale) * mob.movementSpeed * this.getBlockSpeedFactor(mob, this.colliderWorld!);
+    mob.vel.x += length < 1.0e-5 ? 0 : (look.x / length) * horizontal;
+    mob.vel.z += length < 1.0e-5 ? 0 : (look.z / length) * horizontal;
+    mob.vel.y += f32(f32(1.4285) * scale) * jumpPower;
+    mob.dashCooldown = 55;
+    mob.dashing = true;
+  }
+
+  /** Camel.refuseToMove: sitting, or sitting down or standing up. */
+  private camelRefusesToMove(mob: RiddenMobState): boolean {
+    return mob.camelSitting || this.camelInPoseTransition(mob);
+  }
+
+  private camelInPoseTransition(mob: RiddenMobState): boolean {
+    return mob.poseTime < (mob.camelSitting ? 40 : 52);
+  }
+
+  /**
+   * The rider's jump released (LocalPlayer.aiStep calls onPlayerJump with the charge in percent): a camel that can
+   * dash, saddled on the ground with its cooldown run out, dashes at its next tick (getPlayerJumpPendingScale).
+   */
+  riderJump(mob: RiddenMobState, power: number) {
+    if (mob.type !== "camel" || mob.dashCooldown > 0 || !mob.onGround) return;
+    const f32 = Math.fround;
+    const percent = Math.max(0, power);
+    mob.jumpPendingScale = percent >= 90 ? 1 : f32(f32(0.4) + f32(f32(f32(0.4) * percent) / f32(90)));
   }
 
   /**
@@ -181,6 +262,12 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     }
 
     const f32 = Math.fround;
+    // Camel.travel: it does not move while it refuses to, on the ground
+    if (mob.type === "camel" && this.camelRefusesToMove(mob) && mob.onGround) {
+      mob.vel.x = 0;
+      mob.vel.z = 0;
+      mob.heading = { forward: 0, strafe: 0 };
+    }
     const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(mob, world));
     const friction = (blockBelow ? this.blockSlipperiness[blockBelow.type] : undefined) ?? ctx.worldSettings.defaultSlipperiness;
     const inertia = mob.onGround ? f32(f32(friction) * f32(0.91)) : f32(0.91);
