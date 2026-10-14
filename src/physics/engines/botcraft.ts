@@ -1990,12 +1990,22 @@ export class BotcraftPhysics implements IPhysics {
 
     // 1.20.5: movement is now considered var4.
 
-    // before 1.14 the collision flags compare the movements exactly
+    // Entity.move's collision flags: exact before 1.14; since then the horizontal one by Mth.equal (within 1e-5F) and
+    // the vertical one exact
+    const legacyMove = legacyMovedBox != null;
     const collided = (requested: number, moved: number) =>
-      legacyMovedBox != null ? requested !== moved : Math.abs(moved - requested) > 1e-7;
+      legacyMove ? requested !== moved : !(Math.abs(moved - requested) < Math.fround(1.0e-5));
     const collisionX = collided(movementBeforeCollisions.x, movement.x);
-    const collisionY = collided(movementBeforeCollisions.y, movement.y);
+    const collisionY = movementBeforeCollisions.y !== movement.y;
     const collisionZ = collided(movementBeforeCollisions.z, movement.z);
+    // the velocity reset: exact on each axis before 1.18.2, where (1.14 - 1.18.1) the z reset puts back the x from
+    // before the x reset; by the horizontal collision flags since
+    let resetX = collisionX;
+    let resetZ = collisionZ;
+    if (!legacyMove && this.verLessThan("1.18.2")) {
+      resetZ = movementBeforeCollisions.z !== movement.z;
+      resetX = movementBeforeCollisions.x !== movement.x && !resetZ;
+    }
 
     // console.log('collisions', collisionX, collisionY, collisionZ, movementBeforeCollisions, movement, player.vel, player.pos, player.getBB())
     player.isCollidedHorizontally = collisionX || collisionZ;
@@ -2040,10 +2050,10 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     // update speeds
-    if (collisionX) {
+    if (resetX) {
       player.vel.x = 0.0;
     }
-    if (collisionZ) {
+    if (resetZ) {
       player.vel.z = 0.0;
     }
     if (collisionY) {
