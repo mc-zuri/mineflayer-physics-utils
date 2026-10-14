@@ -47,8 +47,8 @@ export class BoatState extends EntityState {
     const dims = resolveBoatDimensions(ctx.data, entity.name);
     return new BoatState(
       ctx,
-      entity.height ?? dims.height,
-      (entity.width ?? dims.width) / 2,
+      dims.height,
+      dims.width / 2,
       entity.position.clone(),
       entity.velocity.clone(),
       entity.onGround ?? false,

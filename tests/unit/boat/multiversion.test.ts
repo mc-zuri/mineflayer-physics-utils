@@ -2,6 +2,7 @@ import { describe, it } from "mocha";
 import expect from "expect";
 import { Vec3 } from "vec3";
 import { BoatStatus } from "../../../src/physics/states/boatState";
+import { resolveBoatDimensions } from "../../../src/physics/settings/boatSettings";
 import {
   BoatTestWorld,
   createBoatRig,
@@ -82,7 +83,7 @@ describe("BoatPhysics multiversion compatibility", () => {
     describe(version, () => {
       for (const entityName of entityNames) {
         describe(entityName, () => {
-          it("resolves the requested entity descriptor and uses its dimensions", () => {
+          it("resolves the requested entity descriptor and uses the boat's dimensions", () => {
             const rig = createBoatRig({
               version,
               entityName,
@@ -91,8 +92,10 @@ describe("BoatPhysics multiversion compatibility", () => {
 
             expect(rig.entityName).toBe(entityName);
             expect(rig.entityDescriptor).toBe(rig.mcData.entitiesByName[entityName]);
-            expect(rig.boatState.height).toBe(rig.entityDescriptor.height);
-            expect(rig.boatState.halfWidth * 2).toBe(rig.entityDescriptor.width);
+            // (vanilla's 1.375 x 0.5625 where minecraft-data is wrong, before 1.14)
+            const dims = resolveBoatDimensions(rig.mcData, entityName);
+            expect(rig.boatState.height).toBe(dims.height);
+            expect(rig.boatState.halfWidth * 2).toBe(dims.width);
           });
 
           it("uses boat vehicle physics context instead of living-entity defaults", () => {

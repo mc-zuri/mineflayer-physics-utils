@@ -107,12 +107,16 @@ export function resolveBoatSettings(mcData: md.IndexedData): BoatPhysicsSettings
   return resolveBoatSettingsFromSection(mcData, boatSection);
 }
 
-/** Resolve boat dimensions from minecraft-data, falling back when missing. */
+/** Vanilla's boat box (EntityBoat.setSize / EntityType.BOAT) since 1.9; minecraft-data has 1.5 x 0.6 before 1.13, 0.6 high in 1.13. */
+const VANILLA_BOAT_DIMENSIONS: BoatDimensions = { width: 1.375, height: 0.5625 };
+
+/** Resolve boat dimensions from minecraft-data, falling back when missing (vanilla's own before 1.14, where the data is wrong). */
 export function resolveBoatDimensions(
   mcData: md.IndexedData,
   entityName?: string,
   fallback: BoatDimensions = boatSection.fallbackDimensions,
 ): BoatDimensions {
+  if (mcData.version["<"]("1.14") && (entityName === undefined || entityName === "boat")) return { ...VANILLA_BOAT_DIMENSIONS };
   if (entityName) {
     const named = mcData.entitiesByName[entityName];
     if (hasValidDimensions(named)) {

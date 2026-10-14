@@ -188,9 +188,9 @@ describe("Boat settings simulation parity", () => {
 
 describe("Boat dimensions resolution", () => {
   const cases = [
-    { version: "1.11.2", width: 1.5, height: 0.6 },
-    { version: "1.12.2", width: 1.5, height: 0.6 },
-    { version: "1.13.2", width: 1.375, height: 0.6 },
+    { version: "1.11.2", width: 1.375, height: 0.5625 }, // vanilla's, not minecraft-data's 1.5 x 0.6
+    { version: "1.12.2", width: 1.375, height: 0.5625 },
+    { version: "1.13.2", width: 1.375, height: 0.5625 },
     { version: "1.14.4", width: 1.375, height: 0.5625 },
     { version: "1.21.4", width: 1.375, height: 0.5625 },
   ];
@@ -231,8 +231,8 @@ describe("Boat dimensions resolution", () => {
       name: "boat",
     };
     const state = BoatState.CREATE_FROM_ENTITY(rig.physics, entity as Entity);
-    expect(state.height).toBe(0.6);
-    expect(state.halfWidth).toBe(1.5 / 2);
+    expect(state.height).toBe(0.5625);
+    expect(state.halfWidth).toBe(1.375 / 2);
   });
 
   it("rejects partially filled entity descriptors and continues the chain", () => {
