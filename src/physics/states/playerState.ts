@@ -163,6 +163,9 @@ export class PlayerState implements IEntityState {
     public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
     /** The other entities near the player (input only): the boats and shulkers it collides with, the mobs that push it. */
     public nearbyEntities: NearbyEntity[] = [];
+    /** How far pistons moved the player on each axis this tick (Entity.pistonDeltas) and the tick (age) it was. */
+    public pistonDeltas: number[] = [0, 0, 0];
+    public pistonDeltasTick = -1;
 
     public jumpTicks: number = 0;
     public jumpQueued: boolean = false;
@@ -510,6 +513,8 @@ export class PlayerState implements IEntityState {
         tmp.wasInPowderSnow = this.wasInPowderSnow;
         tmp.keptBoundingBox = this.keptBoundingBox;
         tmp.nearbyEntities = this.nearbyEntities;
+        tmp.pistonDeltas = [...this.pistonDeltas];
+        tmp.pistonDeltasTick = this.pistonDeltasTick;
 
         tmp.sneakCollision = false; //TODO
 
@@ -596,6 +601,8 @@ export class PlayerState implements IEntityState {
         this.wasInPowderSnow = other.wasInPowderSnow;
         this.keptBoundingBox = other.keptBoundingBox;
         this.nearbyEntities = other.nearbyEntities;
+        this.pistonDeltas = [...other.pistonDeltas];
+        this.pistonDeltasTick = other.pistonDeltasTick;
 
         this.sneakCollision = false; //TODO
 

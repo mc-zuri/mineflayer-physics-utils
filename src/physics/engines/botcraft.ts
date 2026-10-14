@@ -37,6 +37,45 @@ type AABBPoints = [number, number, number, number, number, number];
 /** Boats, chest boats and rafts: "boat" before 1.21.2, then one type per wood ("oak_boat", "bamboo_chest_raft"). */
 const isBoatName = (name: string) => /(^|_)(boat|raft)$/.test(name);
 
+/**
+ * A moving piston block (PistonMovingBlockEntity) as the client holds it: its block position, the piston's facing (a
+ * unit step), whether it extends, whether it is the piston's own head or base (isSourcePiston), its progress (a float,
+ * 0 to 1) before the tick, and the collision boxes (block-local) of the block it moves (getCollisionRelatedBlockState).
+ */
+export interface MovingPiston {
+  pos: [number, number, number];
+  direction: [number, number, number];
+  extending: boolean;
+  source: boolean;
+  progress: number;
+  shapes: number[][];
+}
+
+/** PistonMath.getMovementArea: the slab the face of box toward dir sweeps over distance. */
+function pistonMovementArea(box: AABB, dir: [number, number, number], distance: number): AABB {
+  const [dx, dy, dz] = dir;
+  const step = distance * (dx + dy + dz);
+  const lo = Math.min(step, 0.0);
+  const hi = Math.max(step, 0.0);
+  if (dx < 0) return new AABB(box.minX + lo, box.minY, box.minZ, box.minX + hi, box.maxY, box.maxZ);
+  if (dx > 0) return new AABB(box.maxX + lo, box.minY, box.minZ, box.maxX + hi, box.maxY, box.maxZ);
+  if (dy < 0) return new AABB(box.minX, box.minY + lo, box.minZ, box.maxX, box.minY + hi, box.maxZ);
+  if (dz < 0) return new AABB(box.minX, box.minY, box.minZ + lo, box.maxX, box.maxY, box.minZ + hi);
+  if (dz > 0) return new AABB(box.minX, box.minY, box.maxZ + lo, box.maxX, box.maxY, box.maxZ + hi);
+  return new AABB(box.minX, box.maxY + lo, box.minZ, box.maxX, box.maxY + hi, box.maxZ);
+}
+
+/** PistonMovingBlockEntity.getMovement: how far area reaches into box along dir. */
+function pistonMovement(area: AABB, dir: [number, number, number], box: AABB): number {
+  const [dx, dy, dz] = dir;
+  if (dx > 0) return area.maxX - box.minX;
+  if (dx < 0) return box.maxX - area.minX;
+  if (dy < 0) return box.maxY - area.minY;
+  if (dz > 0) return area.maxZ - box.minZ;
+  if (dz < 0) return box.maxZ - area.minZ;
+  return area.maxY - box.minY;
+}
+
 
 /**
  * The key an attribute the server synced is kept under (mineflayer's entity.attributes): the name the protocol gives
@@ -2032,6 +2071,122 @@ export class BotcraftPhysics implements IPhysics {
     if (/glass$|_leaves$|copper_grate$|^mangrove_roots$|^moving_piston$/.test(block.name)) return false;
     if (!this.verLessThan("1.16") && ["farmland", "soul_sand", "dirt_path", "grass_path", "mud"].includes(block.name)) return true;
     return fullCube;
+  }
+
+  /**
+   * A moving piston block pushing the player, as PistonMovingBlockEntity.tick's moveCollidedEntities does (1.11+): the
+   * client ticks its block entities after its entities, so the caller runs this after simulate, once per moving piston,
+   * with its progress before the tick (then advances it by 0.5F). The moved block's collision boxes, placed at the
+   * progress and swept by the 0.5 the block moves, push the player out of their way plus 0.01, along the direction
+   * the block moves, by Entity.move(PISTON).
+   */
+  public pushByMovingPiston(ctx: EPhysicsCtx, world: World, piston: MovingPiston): void {
+    if (this.verLessThan("1.11") || !(ctx.state instanceof PlayerState)) return;
+    const player = ctx.state;
+    if (player.gameMode === "spectator") return;
+    const f32 = Math.fround;
+    const progress = f32(piston.progress);
+    const distance = f32(f32(progress + f32(0.5)) - progress);
+    const [fx, fy, fz] = piston.direction;
+    const sign = piston.extending ? 1 : -1;
+    const dir: [number, number, number] = [fx * sign, fy * sign, fz * sign];
+    // moveByPositionAndProgress: the block at its position plus the progress still to go
+    const extended = f32(piston.extending ? progress - 1 : 1 - progress);
+    const [px, py, pz] = piston.pos;
+    const ox = px + extended * fx;
+    const oy = py + extended * fy;
+    const oz = pz + extended * fz;
+    const box = this.boundingBoxForMove(player).bb;
+    let push = 0.0;
+    for (const s of piston.shapes) {
+      const area = pistonMovementArea(new AABB(s[0] + ox, s[1] + oy, s[2] + oz, s[3] + ox, s[4] + oy, s[5] + oz), dir, distance);
+      if (area.intersects(box)) {
+        push = Math.max(push, pistonMovement(area, dir, box));
+        if (push >= distance) break;
+      }
+    }
+    if (push <= 0.0) return;
+    push = Math.min(push, distance) + 0.01;
+    this.moveByPiston(ctx, world, new Vec3(push * dir[0], push * dir[1], push * dir[2]));
+    if (!piston.extending && piston.source) {
+      // fixEntityWithinPistonBase: out of the piston's own cell, against the direction it retracts in
+      const moved = this.boundingBoxForMove(player).bb;
+      const cell = new AABB(px, py, pz, px + 1, py + 1, pz + 1);
+      if (moved.intersects(cell)) {
+        const back: [number, number, number] = [-dir[0], -dir[1], -dir[2]];
+        let e = pistonMovement(cell, back, moved) + 0.01;
+        const inside = new AABB(Math.max(moved.minX, cell.minX), Math.max(moved.minY, cell.minY), Math.max(moved.minZ, cell.minZ),
+          Math.min(moved.maxX, cell.maxX), Math.min(moved.maxY, cell.maxY), Math.min(moved.maxZ, cell.maxZ));
+        const f = pistonMovement(cell, back, inside) + 0.01;
+        if (Math.abs(e - f) < 0.01) {
+          e = Math.min(e, distance) + 0.01;
+          this.moveByPiston(ctx, world, new Vec3(e * back[0], e * back[1], e * back[2]));
+        }
+      }
+    }
+  }
+
+  /**
+   * Entity.move(MoverType.PISTON): at most 0.51 per axis in a game tick (limitPistonMovement), the stuck multiplier
+   * cleared without slowing the move, the move collided as the player's own (without its step up), the collision
+   * flags and ground contact from it, the motion stopped on the axes it hit and scaled by the block speed factor.
+   */
+  private moveByPiston(ctx: EPhysicsCtx, world: World, requested: Vec3) {
+    const player = ctx.state as PlayerState;
+    if (requested.x * requested.x + requested.y * requested.y + requested.z * requested.z <= 1e-7) return;
+    if (player.pistonDeltasTick !== player.age) {
+      player.pistonDeltas = [0, 0, 0];
+      player.pistonDeltasTick = player.age;
+    }
+    const axis = requested.x !== 0 ? 0 : requested.y !== 0 ? 1 : requested.z !== 0 ? 2 : -1;
+    if (axis < 0) return;
+    const wanted = axis === 0 ? requested.x : axis === 1 ? requested.y : requested.z;
+    const limited = Math.min(Math.max(wanted + player.pistonDeltas[axis], -0.51), 0.51);
+    const amount = limited - player.pistonDeltas[axis];
+    player.pistonDeltas[axis] = limited;
+    if (Math.abs(amount) <= 9.999999747378752e-6) return;
+    const movement = new Vec3(axis === 0 ? amount : 0, axis === 1 ? amount : 0, axis === 2 ? amount : 0);
+
+    if (player.stuckSpeedMultiplier.norm() ** 2 > 1e-7) {
+      player.stuckSpeedMultiplier.set(0, 0, 0);
+      player.vel.set(0, 0, 0);
+    }
+
+    const sizedBox = this.boundingBoxForMove(player);
+    const bb = sizedBox.bb;
+    let moved: Vec3;
+    let movedBox: AABB | null = null;
+    if (this.verLessThan("1.14")) {
+      const legacy = this.legacyCollide(world, bb, movement, 0, player.onGround, (swept) => this.otherColliders(player, swept));
+      moved = legacy.movement;
+      movedBox = legacy.bb;
+    } else {
+      moved = this.collideBoundingBox(world, bb, movement, this.otherColliders(player, bb.expandTowards(movement)));
+    }
+    const movedSqr = moved.norm() ** 2;
+    if (movedBox != null) {
+      this.keepBoundingBox(player, { ...sizedBox, bb: movedBox }, true);
+    } else if (movedSqr > 1e-7 || movement.norm() ** 2 - movedSqr < 1e-7) {
+      if (this.verLessThan("1.17")) this.keepBoundingBox(player, { ...sizedBox, bb: bb.move(moved) }, true);
+      else player.pos.add(moved);
+    }
+
+    const collided = (a: number, b: number) => (movedBox != null ? a !== b : Math.abs(a - b) > 1e-7);
+    const collisionX = collided(movement.x, moved.x);
+    const collisionZ = collided(movement.z, moved.z);
+    player.isCollidedHorizontally = collisionX || collisionZ;
+    player.isCollidedVertically = movement.y !== moved.y;
+    player.onGround = player.isCollidedVertically && movement.y < 0;
+    if (!player.onGround) player.supportingBlockPos = null;
+    player.isCollidedHorizontallyMinor = player.isCollidedHorizontally && this.isCollidedHorizontallyMinor(player, moved);
+    if (collisionX) player.vel.x = 0;
+    if (collisionZ) player.vel.z = 0;
+    if (player.isCollidedVertically) player.vel.y = 0;
+    if (!this.verLessThan("1.15")) {
+      const factor = this.getBlockSpeedFactor(player, world);
+      player.vel.x *= factor;
+      player.vel.z *= factor;
+    }
   }
 
   /**
