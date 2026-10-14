@@ -124,7 +124,10 @@ export class BoatPhysics extends EntityPhysics {
     state.onGround = state.isCollidedVertically && want.y < 0;
     if (blockedX) state.vel.x = 0;
     if (blockedZ) state.vel.z = 0;
-    if (state.isCollidedVertically) state.vel.y = 0;
+    // landing or hitting a ceiling: Block.updateEntityAfterFallOn multiplies the motion by (1, 0, 1) from 1.14 (until
+    // 26.2), which keeps the sign of the fall (-0); before, onEntityLand sets 0
+    const multipliesY = !this.data.version["<"]("1.14") && this.data.version["<"]("26.2");
+    if (state.isCollidedVertically) state.vel.y = multipliesY ? state.vel.y * 0 : 0;
   }
 
   /**

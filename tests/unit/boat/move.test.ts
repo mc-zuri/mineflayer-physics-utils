@@ -144,7 +144,8 @@ describe("Boat move with its own box (1.14 - 1.16)", () => {
 });
 
 // v_boat_dismount tick 9 on 1.14.4: 1.14 - 1.17 Entity.collide adds the world border to the colliders while the boat
-// is inside it, so there is always a collider and the settling boat's motion under 1.0E-7 stays: it lands in place.
+// is inside it, so there is always a collider and the settling boat's motion under 1.0E-7 stays: it lands in place,
+// its fall multiplied by 0 (Block.updateEntityAfterFallOn), -0.
 describe("Boat move beside the world border's collider (1.14 - 1.17)", () => {
   it("drops a motion under 1.0E-7 in open water (1.14.4, v_boat_dismount tick 9)", () => {
     const rig = boatOnPool("1.14.4", 100.52323113880676, -0.0000032915532746508047);
@@ -157,7 +158,7 @@ describe("Boat move beside the world border's collider (1.14 - 1.17)", () => {
 
     simulateBoatTick(rig);
 
-    expect(state.vel.y).toBe(0);
+    expect(state.vel.y).toBe(-0);
     expect(state.onGround).toBe(true);
     expect(state.pos.y).toBe(100.52323113880676);
     expect(state.pos.x).toBe(1.649681870925447);
