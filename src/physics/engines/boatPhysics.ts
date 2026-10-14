@@ -122,12 +122,19 @@ export class BoatPhysics extends EntityPhysics {
     state.isCollidedHorizontally = blockedX || blockedZ;
     state.isCollidedVertically = want.y !== moved.y;
     state.onGround = state.isCollidedVertically && want.y < 0;
+    if (!this.data.version["<"]("26.2")) {
+      // Entity.restituteMovementAfterCollisions: a collided axis bounces back by the boat's bounciness, 0
+      // (Entity.getEntityBounciness), so -v * 0. (A landing on a bouncy block, slime or a bed, is not modelled.)
+      if (blockedX) state.vel.x = -state.vel.x * 0;
+      if (blockedZ) state.vel.z = -state.vel.z * 0;
+      if (state.isCollidedVertically) state.vel.y = -state.vel.y * 0;
+      return;
+    }
     if (blockedX) state.vel.x = 0;
     if (blockedZ) state.vel.z = 0;
-    // landing or hitting a ceiling: Block.updateEntityAfterFallOn multiplies the motion by (1, 0, 1) from 1.14 (until
-    // 26.2), which keeps the sign of the fall (-0); before, onEntityLand sets 0
-    const multipliesY = !this.data.version["<"]("1.14") && this.data.version["<"]("26.2");
-    if (state.isCollidedVertically) state.vel.y = multipliesY ? state.vel.y * 0 : 0;
+    // landing or hitting a ceiling: Block.updateEntityAfterFallOn multiplies the motion by (1, 0, 1) from 1.14, which
+    // keeps the sign of the fall (-0); before, onEntityLand sets 0
+    if (state.isCollidedVertically) state.vel.y = this.data.version["<"]("1.14") ? 0 : state.vel.y * 0;
   }
 
   /**
