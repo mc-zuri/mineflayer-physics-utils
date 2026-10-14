@@ -389,15 +389,20 @@ export class PlayerState implements IEntityState {
         // armour enchantments: the boots and leggings in their inventory slots. prismarine-item reads them from the
         // nbt as { name, lvl }; from 1.20.5 its enchants are the enchantments component as sent, { enchantments: [{ id, level }] }
         type Enchants = { name: string; lvl: number }[] | { enchantments?: { id: number; level: number }[] };
-        const enchantmentsOf = (slot: string) => {
-            const enchants = (bot.inventory.slots[bot.getEquipmentDestSlot(slot)] as { enchants?: Enchants } | null | undefined)?.enchants;
+        const enchantmentsOfItem = (item: { enchants?: Enchants } | null | undefined) => {
+            const enchants = item?.enchants;
             if (Array.isArray(enchants)) return enchants.map(({ name, lvl }) => ({ id: name, lvl }));
             return (enchants?.enchantments ?? []).map(({ id, level }) => ({ id, lvl: level }));
         };
+        const enchantmentsOf = (slot: string) =>
+            enchantmentsOfItem(bot.inventory.slots[bot.getEquipmentDestSlot(slot)] as { enchants?: Enchants } | null | undefined);
         const boots = enchantmentsOf("feet");
         this.depthStrider = this.ctx.getEnchantmentLevel(CheapEnchantments.DEPTH_STRIDER, boots);
         this.soulSpeed = this.ctx.getEnchantmentLevel(CheapEnchantments.SOUL_SPEED, boots);
         this.swiftSneak = this.ctx.getEnchantmentLevel(CheapEnchantments.SWIFT_SNEAK, enchantmentsOf("legs"));
+        // the riptide level of the held trident, which TridentItem.releaseUsing launches by
+        const held = bot.heldItem as unknown as ({ name?: string; enchants?: Enchants } | null);
+        this.riptide = held?.name === "trident" ? this.ctx.getEnchantmentLevel(CheapEnchantments.RIPTIDE, enchantmentsOfItem(held)) : 0;
 
         // the pose the engine left on the bot (the client decides its own pose), else the synced one
         this.pose = (bot.entity as Entity & { pose?: PlayerPoses }).pose ?? getPose(bot.entity);
