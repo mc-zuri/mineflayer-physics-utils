@@ -354,6 +354,9 @@ export class BotcraftPhysics implements IPhysics {
 
     const playerFlag = ctx.entityType.type === "player";
 
+    // the use key is handled before the entities tick: releasing a riptide trident launches the player
+    if (playerFlag && entity instanceof PlayerState) this.releaseUsingItem(ctx, world);
+
     // the rockets the client's entity list ticks before the player boost it before its own tick
     if (playerFlag && entity instanceof PlayerState && entity.fireworkRocketsBeforePlayer > 0) {
       this.applyFireworkBoost(entity, entity.fireworkRocketsBeforePlayer);
@@ -702,6 +705,42 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
+   * The item use the player let go of this tick, before its tick (Minecraft.handleKeybinds ->
+   * LocalPlayer.releaseUsingItem -> TridentItem.releaseUsing, 1.13+): a riptide trident used for 10 ticks or more,
+   * in water, pushes the player along the float look vector by 3 * (1 + level) / 4 (the riptide spin attack strength
+   * from 1.21: 1.5 + 0.75 per level above the first), starts the 20-tick spin attack, and lifts a player on the ground
+   * by 1.1999999. `itemUseTicks` counts the ticks of the current use (getUseDuration - useItemRemainingTicks).
+   */
+  private releaseUsingItem(ctx: EPhysicsCtx, world: World) {
+    const player = ctx.state as PlayerState;
+    if (player.isUsingItem) {
+      player.itemUseTicks++;
+      return;
+    }
+    const useTicks = player.itemUseTicks;
+    player.itemUseTicks = 0;
+    // (rain also lets a riptide trident launch; the engine does not know the weather)
+    if (this.verLessThan("1.13") || useTicks < 10 || player.riptide <= 0 || !player.isInWater) return;
+    const f32 = Math.fround;
+    const yaw = floatRadians(this.yawDegrees(player));
+    const pitch = f32(this.pitchDegrees(player) * f32(0.017453292));
+    let x = f32(-this.mth.sin(yaw) * this.mth.cos(pitch));
+    let y = -this.mth.sin(pitch);
+    let z = f32(this.mth.cos(yaw) * this.mth.cos(pitch));
+    const length = f32(Math.sqrt(f32(f32(f32(x * x) + f32(y * y)) + f32(z * z))));
+    const strength = this.verLessThan("1.21")
+      ? f32(3 * f32(f32(1 + player.riptide) / 4))
+      : f32(f32(1.5) + f32(f32(0.75) * (player.riptide - 1)));
+    const scale = f32(strength / length);
+    x = f32(x * scale);
+    y = f32(y * scale);
+    z = f32(z * scale);
+    player.vel.translate(x, y, z); // Entity.push
+    player.autoSpinAttackTicks = 20;
+    if (player.onGround) this.applyMovement(ctx, world, new Vec3(0, 1.1999999284744263, 0));
+  }
+
+  /**
    * Entity.handleWaterMovement before 1.13: World.handleMaterialAcceleration over the box shrunk by 0.4F vertically
    * and 0.001 all round. A water block (any level) counts when ceil(box maxY) reaches its float top
    * (y + 1 - (level + 1) / 9F); the flows of the counted blocks are summed and normalized (float square root), and
@@ -954,6 +993,11 @@ export class BotcraftPhysics implements IPhysics {
       const { x: startX, z: startZ } = player.pos;
       this.movePlayer(ctx, world, sprintedBefore); // TODO: should be in player-specific logic??
       this.updateAutoJump(ctx, world, Math.fround(player.pos.x - startX), Math.fround(player.pos.z - startZ), moveVector);
+      // LivingEntity.aiStep: the spin attack runs down, and ends on hitting a wall
+      if (player.autoSpinAttackTicks > 0) {
+        player.autoSpinAttackTicks--;
+        if (player.isCollidedHorizontally) player.autoSpinAttackTicks = 0;
+      }
       // before 1.14 isInLava is asked live: after the move it tells the new position
       if (this.verLessThan("1.14")) player.isInLava = this.isInLavaLegacy(player, world);
       // LivingEntity.aiStep: applyEffectsFromBlocks after travel (1.21.2+)
@@ -2070,7 +2114,7 @@ export class BotcraftPhysics implements IPhysics {
     player.keptBoundingBox = { bb, pos: player.pos.clone(), width, height };
   }
 
-  applyMovement(ctx: EPhysicsCtx, world: World) {
+  applyMovement(ctx: EPhysicsCtx, world: World, requested?: Vec3) {
     const player = ctx.state as PlayerState;
     if (player.gameMode === "spectator") {
       if (this.verLessThan("1.17")) {
@@ -2085,7 +2129,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // console.log('wtf vel?', player.vel)
     // this might be a clone.
-    let movement = player.vel.clone();
+    let movement = (requested ?? player.vel).clone();
 
 
     // if a player is stuck, reset stuck multiplier and set velocity to 0.

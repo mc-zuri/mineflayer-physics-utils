@@ -201,6 +201,11 @@ export class PlayerState implements IEntityState {
 
     public depthStrider: number = 0;
     public swiftSneak: number = 0;
+    /** The riptide level of the item in use (a trident), and the ticks it has been used (vanilla's use duration). */
+    public riptide: number = 0;
+    public itemUseTicks: number = 0;
+    /** LivingEntity.autoSpinAttackTicks: the riptide spin attack still running. */
+    public autoSpinAttackTicks: number = 0;
     public soulSpeed: number = 0;
 
     public effects: Effect[] = [];
@@ -542,6 +547,9 @@ export class PlayerState implements IEntityState {
         tmp.soulSpeed = this.soulSpeed;
         tmp.swiftSneak = this.swiftSneak;
         tmp.depthStrider = this.depthStrider;
+        tmp.riptide = this.riptide;
+        tmp.itemUseTicks = this.itemUseTicks;
+        tmp.autoSpinAttackTicks = this.autoSpinAttackTicks;
 
         tmp.pose = this.pose;
         tmp.gameMode = this.gameMode;
@@ -623,6 +631,9 @@ export class PlayerState implements IEntityState {
         this.soulSpeed = other.soulSpeed;
         this.levitation = other.levitation;
         this.depthStrider = other.depthStrider;
+        this.riptide = other.riptide;
+        this.itemUseTicks = other.itemUseTicks;
+        this.autoSpinAttackTicks = other.autoSpinAttackTicks;
 
         this.pose = other.pose;
         this.gameMode = other.gameMode;
