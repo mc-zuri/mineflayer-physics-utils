@@ -10,6 +10,14 @@ import { BotcraftPhysics } from "./botcraft";
 type World = { getBlock: world.WorldSync["getBlock"] };
 type AABBPoints = [number, number, number, number, number, number];
 
+/** Mth.wrapDegrees of a float: within [-180, 180). */
+function wrapDegreesF(degrees: number): number {
+  let wrapped = Math.fround(degrees % 360);
+  if (wrapped >= 180) wrapped = Math.fround(wrapped - 360);
+  if (wrapped < -180) wrapped = Math.fround(wrapped + 360);
+  return wrapped;
+}
+
 /** LiquidBlock.SHAPE_STABLE: the lower half of a fluid block, what a strider stands on. */
 const STABLE_FLUID_SHAPE: AABBPoints = [0, 0, 0, 1, 0.5, 1];
 
@@ -22,10 +30,12 @@ export interface RiderInput {
   xxa?: number;
   zza?: number;
   sprinting?: boolean;
+  /** the rider's jumping after its last aiStep (LivingEntity.isJumping): what a happy ghast rises on */
+  jumping?: boolean;
 }
 
 /**
- * The client side of a mob the local player rides and steers (pig, strider, camel): the vehicle ticks before its
+ * The client side of a mob the local player rides and steers (pig, strider, camel, horses, happy ghast): the vehicle ticks before its
  * passenger, and as the local player controls it, the client moves it with LivingEntity.aiStep and travelRidden, the
  * same LivingEntity.travel a player moves with, at the speed and with the input the mob takes from its rider.
  */
@@ -177,8 +187,93 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       case "camel":
         this.tickRiddenCamel(mob, rider);
         return;
+      case "happy_ghast":
+        this.tickRiddenHappyGhast(mob, rider);
+        return;
     }
     if (HORSE_TYPES.has(mob.type)) this.tickRiddenHorse(mob, rider);
+  }
+
+  /**
+   * A harnessed happy ghast's part of its ridden travel (1.21.6+). HappyGhast.getRiddenInput: the rider's strafe as it
+   * is; with a forward or back input, along the rider's pitch (cos forward, -sin up), half of it and reversed backwards;
+   * 0.5 more up while the rider jumps; all of it scaled by 3.9F * FLYING_SPEED (in double). Then tickRidden: it turns
+   * 0.08F of the way to its rider's yaw (Mth.wrapDegrees) and takes half the rider's pitch (Entity.setRot keeps both
+   * within 360). getRiddenSpeed is unused: HappyGhast.travel flies at FLYING_SPEED * 5.0F / 3.0F.
+   */
+  private tickRiddenHappyGhast(mob: RiddenMobState, rider: RiderInput) {
+    const f32 = Math.fround;
+    const strafe = f32(rider.xxa ?? 0);
+    const zza = f32(rider.zza ?? 0);
+    let forward = 0;
+    let up = 0;
+    if (zza !== 0) {
+      const pitch = floatRadians(rider.pitchDegrees);
+      let forwardLook = this.mth.cos(pitch);
+      let upLook = -this.mth.sin(pitch);
+      if (zza < 0) {
+        forwardLook = f32(forwardLook * f32(-0.5));
+        upLook = f32(upLook * f32(-0.5));
+      }
+      up = upLook;
+      forward = forwardLook;
+    }
+    if (rider.jumping) up = f32(up + f32(0.5));
+    const scale = 3.9000000953674316 * mob.flyingSpeed;
+    mob.riddenInput = new Vec3(strafe * scale, up * scale, forward * scale);
+
+    let yRot = f32(mob.yawDegrees ?? 0);
+    const diff = wrapDegreesF(f32(f32(rider.yawDegrees) - yRot));
+    yRot = f32(yRot + f32(diff * f32(0.08)));
+    mob.yawDegrees = f32(yRot % 360);
+    mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
+    mob.pitch = -mob.pitchDegrees * (Math.PI / 180);
+    mob.riddenSpeed = f32(f32(f32(mob.flyingSpeed) * 5) / 3);
+  }
+
+  /**
+   * HappyGhast.travel: LivingEntity.travelFlying at FLYING_SPEED * 5.0F / 3.0F in water, lava and air alike: no
+   * gravity, the ridden input added along the ghast's yaw (Entity.moveRelative), the move, then 0.8F of the motion kept
+   * in water, 0.5 in lava, 0.91F in the air.
+   */
+  private travelHappyGhast(ctx: EPhysicsCtx, world: World) {
+    const mob = ctx.state as RiddenMobState;
+    this.moveRelative3d(mob.riddenSpeed, mob.riddenInput, mob);
+    this.applyMovement(ctx, world);
+    if (mob.isInWater) mob.vel.scale(0.800000011920929);
+    else if (mob.isInLava) mob.vel.scale(0.5);
+    else mob.vel.scale(0.9100000262260437);
+  }
+
+  /**
+   * Entity.moveRelative with a vertical input (getInputVector): the input normalized when longer than 1, scaled by the
+   * speed, turned by Mth.sin / cos of the yaw; its y added as it is.
+   */
+  private moveRelative3d(speed: number, input: Vec3, mob: RiddenMobState) {
+    let { x, y, z } = input;
+    const lengthSqr = x * x + y * y + z * z;
+    if (lengthSqr < 1.0e-7) {
+      mob.vel.translate(0, 0, 0);
+      return;
+    }
+    if (lengthSqr > 1) {
+      // Vec3.normalize
+      const length = Math.sqrt(lengthSqr);
+      if (length < 1.0e-5) {
+        x = y = z = 0;
+      } else {
+        x /= length;
+        y /= length;
+        z /= length;
+      }
+    }
+    x *= speed;
+    y *= speed;
+    z *= speed;
+    const yaw = floatRadians(mob.yawDegrees ?? 0);
+    const sin = this.mth.sin(yaw);
+    const cos = this.mth.cos(yaw);
+    mob.vel.translate(x * cos - z * sin, y, z * cos + x * sin);
   }
 
   /**
@@ -405,6 +500,11 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     const mob = ctx.state as RiddenMobState;
     // the ridden step height: at least 1 (LivingEntity.maxUpStep with a player in control)
     ctx.stepHeight = Math.max(mob.type === "camel" ? 1.5 : 0.6, 1);
+    // HappyGhast.travel flies, in a fluid too
+    if (mob.type === "happy_ghast") {
+      this.travelHappyGhast(ctx, world);
+      return;
+    }
     // LivingEntity.shouldTravelInFluid: not in a fluid it stands on (a strider in lava)
     const standsOnFluid = mob.type === "strider" && this.isLava(world.getBlock(mob.pos.floored()));
     if ((mob.isInWater || mob.isInLava) && !standsOnFluid) {

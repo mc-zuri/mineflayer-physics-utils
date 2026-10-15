@@ -5,7 +5,7 @@ import { ControlStateHandler } from "../player/playerControls";
 import { PlayerState } from "./playerState";
 
 /** The mobs a player rides and steers itself: their own movement is LivingEntity.travel with the rider's input. */
-export type RiddenMobType = "pig" | "strider" | "camel" | HorseType;
+export type RiddenMobType = "pig" | "strider" | "camel" | "happy_ghast" | HorseType;
 
 /** The horses a player rides and steers once saddled (AbstractHorse). */
 export type HorseType = "horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse";
@@ -16,6 +16,7 @@ const DIMENSIONS: Record<RiddenMobType, { width: number; height: number }> = {
   pig: { width: Math.fround(0.9), height: Math.fround(0.9) },
   strider: { width: Math.fround(0.9), height: Math.fround(1.7) },
   camel: { width: Math.fround(1.7), height: Math.fround(2.375) },
+  happy_ghast: { width: 4, height: 4 },
   horse: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
   donkey: { width: Math.fround(1.3964844), height: Math.fround(1.5) },
   mule: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
@@ -28,6 +29,7 @@ const MOVEMENT_SPEED: Record<RiddenMobType, number> = {
   pig: 0.25,
   strider: 0.17499999701976776,
   camel: 0.09000000357627869,
+  happy_ghast: 0.05,
   horse: 0.22499999403953552,
   donkey: 0.17499999701976776,
   mule: 0.17499999701976776,
@@ -45,6 +47,8 @@ export interface RiddenMobInit {
   movementSpeed?: number;
   /** a horse's or camel's JUMP_STRENGTH attribute's value */
   jumpStrength?: number;
+  /** a happy ghast's FLYING_SPEED attribute's value, when it is not its base */
+  flyingSpeed?: number;
 }
 
 /**
@@ -55,6 +59,10 @@ export class RiddenMobState extends PlayerState {
   public readonly type: RiddenMobType;
   /** the MOVEMENT_SPEED attribute's value */
   public movementSpeed: number;
+  /** HappyGhast: the FLYING_SPEED attribute's value (createAttributes: 0.05) */
+  public flyingSpeed = 0.05;
+  /** HappyGhast: what getRiddenInput took from the rider this tick (strafe, up, forward), the travel's input */
+  public riddenInput = new Vec3(0, 0, 0);
   /** LivingEntity.speed: what the last travelRidden set (getRiddenSpeed) */
   public riddenSpeed = 0;
   /** ItemBasedSteering (pig, strider): boosting, the ticks into the boost and its length (DATA_BOOST_TIME) */
@@ -95,6 +103,7 @@ export class RiddenMobState extends PlayerState {
     this.dimensions = DIMENSIONS[init.type];
     this.movementSpeed = init.movementSpeed ?? MOVEMENT_SPEED[init.type];
     if (init.jumpStrength !== undefined) this.jumpStrength = init.jumpStrength;
+    if (init.flyingSpeed !== undefined) this.flyingSpeed = init.flyingSpeed;
     this.yawDegrees = init.yawDegrees ?? 0;
     this.lastOnGround = this.onGround;
     this.control = ControlStateHandler.DEFAULT();
