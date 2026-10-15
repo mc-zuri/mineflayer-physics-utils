@@ -70,6 +70,28 @@ describe("Botcraft creative flight", () => {
     });
   }
 
+  // LocalPlayer.aiStep since 1.20.5: the second press of jump that starts flying on the ground also jumps from it
+  // (jumpFromGround, 0.42 up), then the flying impulse; before, only the flying impulse lifts the player
+  for (const [version, velY, posY] of [["1.20.4", 0.04296000266075134, 101.07160000443459], ["1.20.5", 0.34199999570846557, 101.56999999284744], ["1.21.11", 0.34199999570846557, 101.56999999284744]] as const) {
+    it(`starting to fly on the ground jumps from it since 1.20.5 (${version})`, () => {
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(0.5, 101, 2619.5), groundLevel: 101 });
+      const state = rig.playerState;
+      state.gameMode = "creative";
+      state.mayFly = true;
+      state.flySpeed = 0.05000000074505806;
+      state.onGround = true;
+      state.vel.set(0, -0.0784000015258789, 0);
+      state.flyJumpTriggerTime = 3; // the first press, a few ticks before
+      state.control.jump = true;
+
+      rig.physics.simulate(rig.playerCtx, createFlatWorld(version, 101) as never);
+
+      expect(state.flying).toBe(true);
+      expect(state.vel.y).toBe(velY);
+      expect(state.pos.y).toBe(posY);
+    });
+  }
+
   for (const { version, posX, velX } of recorded) {
     it(`flies forward at the flying speed (${version}, f_fly_forward)`, () => {
       const rig = flyingRig(version);

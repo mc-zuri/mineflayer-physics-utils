@@ -990,7 +990,7 @@ export class BotcraftPhysics implements IPhysics {
     const moveVector = { x: heading.strafe, y: heading.forward };
     this.pushOutOfBlocks(player, world);
     this.inputsToSprint(ctx, heading, world);
-    this.inputsToFly(ctx);
+    this.inputsToFly(ctx, world);
 
     // If sneaking in water, add downward speed (LocalPlayer.goDownInWater, 1.13+)
     if (player.isInWater && player.control.sneak && !player.flying && !this.verLessThan("1.13")) {
@@ -1516,7 +1516,7 @@ export class BotcraftPhysics implements IPhysics {
     player.sprinting = value;
   }
 
-  private inputsToFly(ctx: EPhysicsCtx) {
+  private inputsToFly(ctx: EPhysicsCtx, world: World) {
     const player = ctx.state as PlayerState;
     let flyChanged = false;
     if (player.mayFly) {
@@ -1532,6 +1532,8 @@ export class BotcraftPhysics implements IPhysics {
             player.flyJumpTriggerTime = ctx.worldSettings.flyJumpTriggerCooldown;
           } else if (this.verLessThan("1.13") || !player.swimming) {
             player.flying = !player.flying;
+            // since 1.20.5 starting to fly on the ground jumps from it
+            if (player.flying && player.onGround && !this.verLessThan("1.20.5")) this.jumpFromGround(player, world, ctx.worldSettings);
             flyChanged = true;
             // onUpdateAbilities();
             player.flyJumpTriggerTime = 0;
@@ -1670,39 +1672,43 @@ export class BotcraftPhysics implements IPhysics {
       if (liquidJump === "swim") {
         player.vel.y += 0.03999999910593033; // jumpInLiquid
       } else if (liquidJump === "ground" && player.jumpTicks === 0) {
-        const blockJumpFactor = this.getBlockJumpFactor(player, world, worldSettings);
-        // the jump boost, 0.1F per level in float (in mineflayer, level 1 is 1, not 0)
-        const jumpBoost = Math.fround(Math.fround(0.1) * player.jumpBoost);
-
-        if (this.verLessThan("1.20.5")) {
-          // added to the jump power in float 1.14 - 1.17 and since 1.20, in double before 1.14 and 1.17.1 - 1.19.4
-          const floatSum = (!this.verLessThan("1.14") && this.verLessThan("1.17.1")) || !this.verLessThan("1.20");
-          const power = Math.fround(Math.fround(0.42) * Math.fround(blockJumpFactor));
-          const jumpPower = floatSum ? Math.fround(power + jumpBoost) : power + jumpBoost;
-          player.vel.y = Math.max(jumpPower, player.vel.y);
-          if (player.sprinting) {
-            // Mth.sin/cos of the float yaw, times 0.2F in float
-            const yaw = floatRadians(this.yawDegrees(player));
-            player.vel.x += Math.fround(-this.mth.sin(yaw) * Math.fround(0.2));
-            player.vel.z += Math.fround(this.mth.cos(yaw) * Math.fround(0.2));
-          }
-        } else {
-          // the jump strength attribute, with its modifiers
-          const synced = entity.attributes[this.jumpStrengthAttribute];
-          const value = Math.fround(synced ? this.attributeValue(this.jumpStrengthAttribute, synced) : Math.fround(0.42));
-          const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
-          if (jumpPower > 1e-5) {
-            player.vel.y = Math.max(jumpPower, player.vel.y);
-            if (player.sprinting) {
-              // Mth.sin/cos of the float yaw, times 0.2 in double
-              const yaw = floatRadians(this.yawDegrees(player));
-              player.vel.x += -this.mth.sin(yaw) * 0.2;
-              player.vel.z += this.mth.cos(yaw) * 0.2;
-            }
-          }
-        }
-
+        this.jumpFromGround(player, world, worldSettings);
         player.jumpTicks = worldSettings.autojumpCooldown;
+      }
+    }
+  }
+
+  /** LivingEntity.jumpFromGround: the jump power (block jump factor, jump boost) up, and a sprint's push forward. */
+  private jumpFromGround(player: PlayerState, world: World, worldSettings: PhysicsWorldSettings) {
+    const blockJumpFactor = this.getBlockJumpFactor(player, world, worldSettings);
+    // the jump boost, 0.1F per level in float (in mineflayer, level 1 is 1, not 0)
+    const jumpBoost = Math.fround(Math.fround(0.1) * player.jumpBoost);
+
+    if (this.verLessThan("1.20.5")) {
+      // added to the jump power in float 1.14 - 1.17 and since 1.20, in double before 1.14 and 1.17.1 - 1.19.4
+      const floatSum = (!this.verLessThan("1.14") && this.verLessThan("1.17.1")) || !this.verLessThan("1.20");
+      const power = Math.fround(Math.fround(0.42) * Math.fround(blockJumpFactor));
+      const jumpPower = floatSum ? Math.fround(power + jumpBoost) : power + jumpBoost;
+      player.vel.y = Math.max(jumpPower, player.vel.y);
+      if (player.sprinting) {
+        // Mth.sin/cos of the float yaw, times 0.2F in float
+        const yaw = floatRadians(this.yawDegrees(player));
+        player.vel.x += Math.fround(-this.mth.sin(yaw) * Math.fround(0.2));
+        player.vel.z += Math.fround(this.mth.cos(yaw) * Math.fround(0.2));
+      }
+    } else {
+      // the jump strength attribute, with its modifiers
+      const synced = player.attributes[this.jumpStrengthAttribute];
+      const value = Math.fround(synced ? this.attributeValue(this.jumpStrengthAttribute, synced) : Math.fround(0.42));
+      const jumpPower = Math.fround(value * Math.fround(blockJumpFactor) + jumpBoost);
+      if (jumpPower > 1e-5) {
+        player.vel.y = Math.max(jumpPower, player.vel.y);
+        if (player.sprinting) {
+          // Mth.sin/cos of the float yaw, times 0.2 in double
+          const yaw = floatRadians(this.yawDegrees(player));
+          player.vel.x += -this.mth.sin(yaw) * 0.2;
+          player.vel.z += this.mth.cos(yaw) * 0.2;
+        }
       }
     }
   }
