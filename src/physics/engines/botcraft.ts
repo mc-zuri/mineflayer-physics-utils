@@ -3263,14 +3263,18 @@ export class BotcraftPhysics implements IPhysics {
     return new Vec3(dx, dy, dz);
   }
 
+  /**
+   * Shapes.collide: the shapes one after another, a motion under 1.0E-7 before the next one is none (1.18+); 1.14 -
+   * 1.17's walk over the blocks drops it after each block, the last one too. A box reaching under 1.0E-7 into a block
+   * is pushed out by that much at most (VoxelShape.collideX), which this drops.
+   */
   shapeCollide(axis: number, bb: AABB, colliders: AABB[], movement: number): number {
-    if (Math.abs(movement) < COLLISION_EPSILON) {
-      return 0.0;
+    if (Math.abs(movement) < COLLISION_EPSILON) return 0.0;
+    for (const collider of colliders) {
+      if (Math.abs(movement) < COLLISION_EPSILON) return 0.0;
+      movement = this.voxelShapeCollide(axis, bb, movement, [collider]);
     }
-
-    movement = this.voxelShapeCollide(axis, bb, movement, colliders);
-
-    return movement;
+    return Math.abs(movement) < COLLISION_EPSILON && this.verLessThan("1.18") ? 0.0 : movement;
   }
 
 

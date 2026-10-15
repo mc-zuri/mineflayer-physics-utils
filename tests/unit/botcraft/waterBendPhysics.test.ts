@@ -233,7 +233,10 @@ describe("Botcraft right-angle water channel", () => {
         // The northward component must move the player fully into L4, after which
         // its straight north current no longer produces a horizontal collision.
         expect(collisionTicks).toBeGreaterThan(0);
-        expect(playerState.pos.x).toBeCloseTo(-17 + playerHalfWidth, 12);
+        // Its box starts 0.3F - 0.3 (1.2e-8) inside the west wall. The wall alone would push it out by that much
+        // (VoxelShape.collideX), but Shapes.collide drops a move under 1.0E-7 at the next shape: vanilla 1.18.2 and
+        // 1.21.11, this channel built block for block, keep x at -16.7 on every tick.
+        expect(playerState.pos.x).toBe(-16.7);
         expect(playerState.pos.z).toBeLessThan(start.z - 0.8);
       });
     });
