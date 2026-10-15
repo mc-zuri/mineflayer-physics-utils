@@ -98,14 +98,29 @@ describe("captured AFK-client spawn", () => {
     expect(playerState.pos.x - xAtFirstCollision!).toBeGreaterThan(0.25);
   });
 
-  it("carries an idle player across the first dry-sign transfer", () => {
+  // Vanilla 1.21.11, this course built block for block (physics-data-generator, 600 idle ticks): the current pushes the
+  // player only while its box is in a water cell (Entity.updateFluidHeightAndDoFluidPushing). Its box leaves the
+  // level-2 cell at x=0 on tick 28 (x past 1.3), it coasts on the dry sign's ground (friction 0.6 * 0.91) and stops
+  // at x=1.4833288449847029 on tick 33, short of the source beyond the sign (reached once the box's max x passes 2).
+  it("stops an idle player on the first dry sign, out of the current", () => {
     const { physics, playerCtx, playerState, world } = createCapturedSpawnRig();
+    const initialZ = playerState.pos.z;
+    const recorded: Record<number, number> = {
+      0: -0.2397028993714442,
+      10: 0.1871180376205626,
+      25: 1.1580575971131797,
+      30: 1.4527098150422986,
+      599: 1.4833288449847029,
+    };
 
     for (let tick = 0; tick < 600; tick++) {
       physics.simulate(playerCtx, world);
+      if (recorded[tick] !== undefined) expect(playerState.pos.x).toBeCloseTo(recorded[tick], 12);
     }
 
-    // Reaching center x=2.3 means the AABB fully entered the source beyond the sign.
-    expect(playerState.pos.x).toBeGreaterThan(2.3);
+    expect(playerState.pos.z).toBe(initialZ);
+    expect(playerState.vel.x).toBe(0);
+    expect(playerState.isInWater).toBe(false);
+    expect(playerState.onGround).toBe(true);
   });
 });
