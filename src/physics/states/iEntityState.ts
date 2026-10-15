@@ -64,4 +64,8 @@ export interface NearbyEntity {
   ticksBeforePlayer?: boolean;
   /** Where its own tick of this client tick leaves it (the next step of its interpolation), the place it pushes from. */
   afterTick?: { position: Vec3; boundingBox: AABB };
+  /** A baby (its synced baby flag). */
+  baby?: boolean;
+  /** A happy ghast's synced stays_still (HappyGhast.staysStill, 1.21.6+): on its still timeout. */
+  staysStill?: boolean;
 }

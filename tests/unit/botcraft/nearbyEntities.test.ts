@@ -98,4 +98,14 @@ describe("PlayerState nearby entities", () => {
     const state = stateWith([{ id: 40, name: "cow", position: new Vec3(20, 101, 38.5), width: 0.9, height: 1.4 }]);
     expect(state.nearbyEntities).toEqual([]);
   });
+
+  // HappyGhast's synced baby and stays_still (metadata 16 and 19 on 26.3) decide whether it is solid
+  it("takes a happy ghast's baby and stays_still flags from its metadata", () => {
+    const metadata: unknown[] = [];
+    metadata[16] = false;
+    metadata[19] = true;
+    const state = stateWith([{ id: 104, name: "happy_ghast", position: new Vec3(4.5, 101, 38.5), width: 4, height: 4, metadata }], "26.3");
+    const [ghast] = state.nearbyEntities;
+    expect([ghast.baby, ghast.staysStill]).toEqual([false, true]);
+  });
 });

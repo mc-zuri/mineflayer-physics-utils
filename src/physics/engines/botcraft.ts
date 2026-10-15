@@ -3185,12 +3185,19 @@ export class BotcraftPhysics implements IPhysics {
   /**
    * The colliders other than blocks a move sweeping `swept` can meet (Level.getEntityCollisions): the boxes of the boats
    * and shulkers near the player (Boat / Shulker canBeCollidedWith, getCollideBox before 1.16, World.getCollisionBoxes
-   * before 1.14) that meet the swept box, grown by 1e-7 since 1.14. They are solid like blocks.
+   * before 1.14) that meet the swept box, grown by 1e-7 since 1.14. They are solid like blocks. A grown happy ghast
+   * (1.21.6+) is solid on its still timeout, and on the client to a player whose feet are at or above its top
+   * (HappyGhast.canBeCollidedWith): the rider who got off stands on it.
    */
   private otherColliders(player: PlayerState, swept: AABB): AABB[] {
     const query = this.verLessThan("1.14") ? swept : swept.clone().expand(1e-7, 1e-7, 1e-7);
+    const solid = (other: PlayerState["nearbyEntities"][number]) => {
+      if (isBoatName(other.name) || other.name === "shulker") return true;
+      if (other.name !== "happy_ghast" || other.baby) return false;
+      return player.pos.y >= other.boundingBox.maxY || !!other.staysStill;
+    };
     return player.nearbyEntities
-      .filter((other) => (isBoatName(other.name) || other.name === "shulker") && query.intersects(other.boundingBox))
+      .filter((other) => solid(other) && query.intersects(other.boundingBox))
       .map(({ boundingBox: b }) => new AABB(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ));
   }
 

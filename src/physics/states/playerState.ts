@@ -78,7 +78,13 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
         const boxAt = (p: Vec3) => new AABB(p.x - halfWidth, p.y, p.z - halfWidth, p.x + halfWidth, p.y + height, p.z + halfWidth);
         // (the vehicle had its tick already, before its passenger's)
         const ticked = other !== bot.vehicle ? interpolation?.next?.(other) : undefined;
+        const metadataKeys: string[] | undefined = (bot.registry?.entitiesByName as Record<string, { metadataKeys?: string[] }> | undefined)?.[name]?.metadataKeys;
+        const flag = (key: string) => {
+            const index = metadataKeys?.indexOf(key) ?? -1;
+            return index >= 0 ? !!(other.metadata as unknown[] | undefined)?.[index] : undefined;
+        };
         out.push([slotOf(other.id), {
+            ...(name === "happy_ghast" && { baby: flag("baby"), staysStill: flag("stays_still") }),
             name,
             living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
             position: shown.clone(),
