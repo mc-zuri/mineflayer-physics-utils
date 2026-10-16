@@ -245,11 +245,18 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       }
       case "strider": {
         // Strider.tickRidden: as the pig; getRiddenSpeed: MOVEMENT_SPEED (less 34% of its base while suffocating)
-        // * 0.55F, or 0.35F suffocating, * the boost factor
+        // * 0.55F, or 0.35F suffocating, * the boost factor. Before 1.19.4 ItemBasedSteering.travel's float
+        // getSteeringSpeed() + speed * 1.15F * sin, where the steering speed is MOVEMENT_SPEED (the client adds no
+        // suffocating modifier) * 0.55F, or 0.23F suffocating
         mob.yawDegrees = f32(f32(rider.yawDegrees) % 360);
         mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
         this.tickBoost(mob);
         mob.heading = { forward: 1, strafe: 0 };
+        if (this.verLessThan("1.19.4")) {
+          const speed = f32(f32(mob.movementSpeed) * f32(mob.suffocating ? 0.23 : 0.55));
+          mob.riddenSpeed = mob.boosting ? f32(speed + f32(f32(speed * f32(1.15)) * this.boostSin(mob))) : speed;
+          return;
+        }
         const movementSpeed = mob.suffocating ? mob.movementSpeed + mob.movementSpeed * -0.3400000035762787 : mob.movementSpeed;
         mob.riddenSpeed = f32(movementSpeed * f32(mob.suffocating ? 0.35 : 0.55) * this.boostFactor(mob));
         return;

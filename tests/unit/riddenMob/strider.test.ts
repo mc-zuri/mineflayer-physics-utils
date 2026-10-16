@@ -88,4 +88,21 @@ describe("RiddenMobPhysics strider", () => {
       expect(onLava.state.suffocating).toBe(true);
     });
   }
+
+  // c_ride_strider_boost (1.16.5): before 1.19.4 ItemBasedSteering.travel boosts the float steering speed (f += f *
+  // 1.15F * sin) and Strider.getSteeringSpeed is MOVEMENT_SPEED, which the client gives no suffocating modifier, * 0.55F,
+  // or 0.23F suffocating: the recorded speed at ticks 36 (boost tick 14 of 171, warm) and 37 (15 of 171, off the lava)
+  it("boosts its float steering speed, 0.23F of it suffocating (1.16.5, c_ride_strider_boost ticks 36 and 37)", () => {
+    const boosted = (suffocating: boolean, boostTime: number) => {
+      const rig = createRiddenMobRig({ version: "1.16.5", type: "strider", pos: [0.5, 101, 0.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+      rig.state.noAi = true;
+      rig.state.suffocating = suffocating;
+      rig.state.startBoost(171);
+      rig.state.boostTime = boostTime;
+      rig.physics.simulateRidden(rig.ctx, createFlatWorld("1.16.5", 101) as any, { yawDegrees: 270, pitchDegrees: 0 });
+      return rig.state.riddenSpeed;
+    };
+    expect(boosted(false, 13)).toBe(0.1243988648056984);
+    expect(boosted(true, 14)).toBe(0.05284333974123001);
+  });
 });
