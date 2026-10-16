@@ -1147,12 +1147,15 @@ export class BotcraftPhysics implements IPhysics {
     // Determine if moving slowly
     const isMovingSlowly = this.isMovingSlowly(ctx, world);
 
-    // 1.21.4 only: LocalPlayer.shouldStopSprinting, right after the input's tick (1.21.5 dropped it: sneaking keeps a
-    // sprint, blindness stops it in shouldStopRunSprinting)
+    // 1.21.4 only: LocalPlayer.shouldStopSprinting, right after the input's tick: blindness, moving slowly or using an
+    // item out of water ends a sprint (vanilla's also checks isFallFlying and isPassenger && !isRidingCamel, not
+    // modelled here). 1.21.5 dropped it: sneaking and item use keep a sprint, blindness stops it in
+    // shouldStopRunSprinting.
     if (this.verGreaterThan("1.21.3") && this.verLessThan("1.21.5")) {
       // TODO: just use stored blindness effect.
       const hasBlindness = this.getEffectLevel(CheapEffects.BLINDNESS, player.effects) > 0;
-      if (hasBlindness || isMovingSlowly) {
+      const usingItem = player.isUsingItem && !player.isUnderWater;
+      if (hasBlindness || isMovingSlowly || usingItem) {
         this.setSprinting(ctx, false);
       }
     }
