@@ -9,6 +9,7 @@ import { EntityState, IEntityState } from "../states";
 import { playerPoseCtx, PlayerPoses } from "../states/poses";
 
 import info from "../info/entity_physics.json";
+import entityGravity from "../info/entity_gravity.json";
 import { BoatPhysicsSettings, resolveBoatSettings } from "./boatSettings";
 import { PhysicsWorldSettings } from "./physicsSettings";
 import { getPose, PlayerState } from "../states";
@@ -170,6 +171,11 @@ export class EPhysicsCtx<State extends IEntityState=IEntityState> {
                     }
             }
         }
+
+        // Each entity's gravity as vanilla's Entity.getDefaultGravity has it (item 0.04, potions 0.05, experience
+        // bottle 0.07, fireballs and wind charges 0, ...), where it knows the entity
+        const vanillaGravity = (entityGravity as Record<string, number>)[entityType.name];
+        if (vanillaGravity !== undefined) this.gravity = vanillaGravity;
 
         if (ctx.supportFeature("independentLiquidGravity")) {
             this.waterGravity = 0.02;
