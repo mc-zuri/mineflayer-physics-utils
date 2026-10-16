@@ -2393,7 +2393,8 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     // const playerAABB = player.getBB();
-    if (!player.flying && movement.y <= 0.0 && player.control.sneak && player.onGround) {
+    // (only a move that does not go up from 1.19; before, a jump off the edge backs off too)
+    if (!player.flying && (movement.y <= 0.0 || this.verLessThan("1.19")) && player.control.sneak && player.onGround) {
       // Player::maybeBackOffFromEdge
       const step = 0.05;
 
