@@ -105,6 +105,10 @@ export class BotcraftPhysics implements IPhysics {
   public stepHeightAttribute: string;
   public gravityAttribute: string;
   public scaleAttribute: string;
+  /** 26.2+: FRICTION_MODIFIER, AIR_DRAG_MODIFIER and BOUNCINESS (null before) */
+  public frictionModifierAttribute: string | null;
+  public airDragModifierAttribute: string | null;
+  public bouncinessAttribute: string | null;
   public sneakingSpeedAttribute: string;
   public supportFeature: ReturnType<typeof makeSupportFeature>;
   public blockSlipperiness: { [name: string]: number };
@@ -151,6 +155,9 @@ export class BotcraftPhysics implements IPhysics {
     this.stepHeightAttribute = extractAttribute(this, "stepHeight");
     this.gravityAttribute = extractAttribute(this, "gravity");
     this.scaleAttribute = extractAttribute(this, "scale");
+    this.frictionModifierAttribute = extractAttribute(this, "frictionModifier");
+    this.airDragModifierAttribute = extractAttribute(this, "airDragModifier");
+    this.bouncinessAttribute = extractAttribute(this, "bounciness");
     // 1.21 - 1.21.1 player.sneaking_speed, then sneaking_speed
     this.sneakingSpeedAttribute = extractAttribute(this, "playerSneakingSpeed") ?? extractAttribute(this, "sneakingSpeed");
 
@@ -1825,6 +1832,25 @@ export class BotcraftPhysics implements IPhysics {
     return goingDown && hasSlowFalling ? Math.min(0.01, defaultGravity) : defaultGravity;
   }
 
+  /** The value of an attribute the server synced to the entity (with its modifiers), else its default. */
+  private syncedAttribute(player: PlayerState, key: string | null, fallback: number): number {
+    if (key == null) return fallback;
+    const synced = player.attributes?.[key];
+    return synced ? this.attributeValue(key, synced) : fallback;
+  }
+
+  /** LivingEntity.computeModifiedFriction (26.2+): Mth.clamp(1 - (1 - friction) * modifier, 0, 1), in float. */
+  protected computeModifiedFriction(friction: number, modifier: number): number {
+    const f32 = Math.fround;
+    return Math.min(Math.max(f32(1 - f32(f32(1 - f32(friction)) * f32(modifier))), 0), 1);
+  }
+
+  /** LivingEntity.getAirDrag (26.2+): 0.98F modified by the AIR_DRAG_MODIFIER attribute; 0.98F before. */
+  protected getAirDrag(player: PlayerState): number {
+    if (this.airDragModifierAttribute == null) return Math.fround(0.98);
+    return this.computeModifiedFriction(0.98, this.syncedAttribute(player, this.airDragModifierAttribute, 1));
+  }
+
   /**
    * Assume EPhysicsCtx is wrapping a PlayerState.
    * @param ctx
@@ -1948,23 +1974,37 @@ export class BotcraftPhysics implements IPhysics {
         this.handleFallFlyingCollisions(player, previousHorizontalSpeed);
       } else {
         const blockBelow = world.getBlock(this.getBlockBelowAffectingMovement(player, world));
+        let verticalDrag = 0.9800000190734863;
 
         // deviation. using our stores slipperiness values.
         const blockSlipperiness = blockBelow ? this.blockSlipperiness[blockBelow.type] : undefined;
-        const friction = blockSlipperiness ?? ctx.worldSettings.defaultSlipperiness;
+        let friction = blockSlipperiness ?? ctx.worldSettings.defaultSlipperiness;
 
         // console.log(blockBelow.name, blockBelow.position, player.supportingBlockPos, friction)
-        // LivingEntity.travel: a float, f * 0.91F on the ground and 0.91F in the air.
-        const inertia = player.lastOnGround
-          ? Math.fround(Math.fround(friction) * Math.fround(ctx.airborneInertia))
-          : Math.fround(ctx.airborneInertia);
+        // LivingEntity.travel: a float, f * 0.91F on the ground and 0.91F in the air. 26.2+ (travelInAir): the block's
+        // friction modified by FRICTION_MODIFIER, the 0.91F and 0.98F drags by AIR_DRAG_MODIFIER
+        // (computeModifiedFriction).
+        let inertia: number;
+        const modifiedFriction = this.frictionModifierAttribute != null;
+        if (modifiedFriction) {
+          const airDragModifier = this.syncedAttribute(player, this.airDragModifierAttribute, 1);
+          if (player.lastOnGround) friction = this.computeModifiedFriction(friction, this.syncedAttribute(player, this.frictionModifierAttribute, 1));
+          const airDrag = this.computeModifiedFriction(0.91, airDragModifier);
+          inertia = Math.fround((player.lastOnGround ? friction : 1) * airDrag);
+          verticalDrag = this.computeModifiedFriction(0.98, airDragModifier);
+        } else {
+          inertia = player.lastOnGround
+            ? Math.fround(Math.fround(friction) * Math.fround(ctx.airborneInertia))
+            : Math.fround(ctx.airborneInertia);
+        }
 
         // deviation, adding additional logic for changing attribute values.
         const movementSpeedAttr = this.getMovementSpeedAttribute(ctx);
 
         let inputStrength: number;
         if (player.lastOnGround) {
-          inputStrength = this.getFrictionInfluencedSpeed(movementSpeedAttr, friction);
+          // 26.2+: a block friction of 0.6 or less (only with FRICTION_MODIFIER) takes the speed as it is
+          inputStrength = modifiedFriction && !(friction > 0.6) ? movementSpeedAttr : this.getFrictionInfluencedSpeed(movementSpeedAttr, friction);
         } else {
           inputStrength = this.getOffGroundSpeed(player, sprintedBefore);
         }
@@ -2016,7 +2056,7 @@ export class BotcraftPhysics implements IPhysics {
         player.vel.z *= inertia;
         // another magic number that I'm pretty sure is random/hardcoded.
         // this can be generalized.
-        player.vel.y *= 0.9800000190734863;
+        player.vel.y *= verticalDrag;
       }
 
       // the other attached rockets tick after the player (one while the duration runs, unless counted)
@@ -2576,16 +2616,18 @@ export class BotcraftPhysics implements IPhysics {
   private restituteMovementAfterCollisions(ctx: EPhysicsCtx, world: World, collisionX: boolean, collisionZ: boolean, movedY: number) {
     const player = ctx.state as PlayerState;
     const vel = player.vel;
-    let restitution = 0; // LivingEntity.getEntityBounciness: the bounciness attribute, 0 for a player
+    // LivingEntity.getEntityBounciness: the BOUNCINESS attribute (0 by default); none while sneaking (isSuppressingBounce)
+    const suppressing = !!player.control.sneak;
+    let restitution = suppressing ? 0 : this.syncedAttribute(player, this.bouncinessAttribute, 0);
     if (collisionX) vel.x = -vel.x * restitution;
     if (collisionZ) vel.z = -vel.z * restitution;
     if (!player.isCollidedVertically) return;
     const gravity = this.getEffectiveGravity(ctx, player);
     if (player.onGround) {
-      const tooSlow = -vel.y < gravity;
+      const tooSlow = -vel.y <= gravity;
       const block = world.getBlock(this.getOnPosLegacy(player, world));
       const blockRestitution = block != null ? this.bounceRestitution.get(block.type) ?? 0 : 0;
-      restitution = !tooSlow && !player.control.sneak ? Math.max(restitution, blockRestitution) : 0;
+      restitution = !tooSlow && !suppressing ? Math.max(restitution, blockRestitution) : 0;
     }
     let gravityCompensation = 0;
     let effectiveDrag = 1;
@@ -2593,7 +2635,7 @@ export class BotcraftPhysics implements IPhysics {
       const portionWithMovement = movedY / vel.y;
       gravityCompensation = portionWithMovement * gravity;
       // Mth.lerp(portion, 1.0, getAirDrag())
-      effectiveDrag = 1 + portionWithMovement * (0.9800000190734863 - 1);
+      effectiveDrag = 1 + portionWithMovement * (this.getAirDrag(player) - 1);
     }
     vel.y = (gravityCompensation - vel.y) * effectiveDrag * restitution;
   }
