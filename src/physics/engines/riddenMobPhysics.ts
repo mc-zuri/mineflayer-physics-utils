@@ -19,6 +19,11 @@ function wrapDegreesF(degrees: number): number {
   return wrapped;
 }
 
+/** AbstractHorse.canPerformRearing: a llama never rears (Llama.canPerformRearing). */
+function canPerformRearing(mob: RiddenMobState): boolean {
+  return mob.type !== "llama" && mob.type !== "trader_llama";
+}
+
 /** LiquidBlock.SHAPE_STABLE: the lower half of a fluid block, what a strider stands on. */
 const STABLE_FLUID_SHAPE: AABBPoints = [0, 0, 0, 1, 0.5, 1];
 
@@ -513,7 +518,7 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       const f32 = Math.fround;
       if (power >= 0) {
         mob.allowStandSliding = true;
-        if (this.horseStandsLocally()) {
+        if (this.horseStandsLocally() && canPerformRearing(mob)) {
           mob.standing = true;
           mob.standCounter = this.verLessThan("1.21.6") ? 1 : 20;
         }

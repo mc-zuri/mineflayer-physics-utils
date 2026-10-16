@@ -11,9 +11,12 @@ export type RiddenMobType = "pig" | "strider" | "camel" | "happy_ghast" | Nautil
 export type NautilusType = "nautilus" | "zombie_nautilus";
 export const NAUTILUS_TYPES: ReadonlySet<string> = new Set<NautilusType>(["nautilus", "zombie_nautilus"]);
 
-/** The horses a player rides and steers once saddled (AbstractHorse). */
-export type HorseType = "horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse";
-export const HORSE_TYPES: ReadonlySet<string> = new Set<HorseType>(["horse", "donkey", "mule", "skeleton_horse", "zombie_horse"]);
+/**
+ * The horses a player rides and steers once saddled (AbstractHorse), and the llamas, which are horses too (Llama extends
+ * AbstractChestedHorse): a client steers one where its rider controls it (1.21.5, where a ridden llama counts as saddled).
+ */
+export type HorseType = "horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse" | "llama" | "trader_llama";
+export const HORSE_TYPES: ReadonlySet<string> = new Set<HorseType>(["horse", "donkey", "mule", "skeleton_horse", "zombie_horse", "llama", "trader_llama"]);
 
 /** EntityType dimensions (EntityType.Builder.sized), in float. */
 const DIMENSIONS: Record<RiddenMobType, { width: number; height: number }> = {
@@ -28,6 +31,8 @@ const DIMENSIONS: Record<RiddenMobType, { width: number; height: number }> = {
   mule: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
   skeleton_horse: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
   zombie_horse: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
+  llama: { width: Math.fround(0.9), height: Math.fround(1.87) },
+  trader_llama: { width: Math.fround(0.9), height: Math.fround(1.87) },
 };
 
 /** The base movement speed of each mob (createAttributes' MOVEMENT_SPEED). */
@@ -43,6 +48,8 @@ const MOVEMENT_SPEED: Record<RiddenMobType, number> = {
   mule: 0.17499999701976776,
   skeleton_horse: 0.20000000298023224,
   zombie_horse: 0.20000000298023224,
+  llama: 0.17499999701976776,
+  trader_llama: 0.17499999701976776,
 };
 
 export interface RiddenMobInit {
