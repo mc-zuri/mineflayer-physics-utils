@@ -341,6 +341,14 @@ export class PlayerState implements IEntityState {
     }
 
     private get unscaledEyeHeight(): number {
+        // Before 1.14 there is no crouching pose: a sneaking player's eyes are 0.08F lower (EntityPlayer.getEyeHeight,
+        // 1.62F - 0.08F), sneaking being the sneak key of its last input update (EntityPlayerSP.isSneaking:
+        // movementInput.sneak, the key of the tick before until the tick reads its keys) or, from 1.9, the 1.65F box a
+        // stand-up the blocks above kept from (EntityPlayer.updateSize); not while sleeping.
+        if (this.ctx.data.version["<"]("1.14") && this.pose !== PlayerPoses.SLEEPING) {
+            const keptSneakBox = this.ctx.data.version[">="]("1.9") && this.keptBoundingBox?.height === Math.fround(1.65);
+            if (this.prevControl.sneak || keptSneakBox) return Math.fround(Math.fround(1.62) - Math.fround(0.08));
+        }
         switch (this.pose) {
             case PlayerPoses.STANDING:
                 return 1.62;
