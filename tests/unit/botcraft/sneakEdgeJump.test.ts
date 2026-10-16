@@ -34,3 +34,27 @@ describe("Botcraft sneaking jump at a ledge", () => {
     expect(player.pos.x).toBeGreaterThan(1.29);
   });
 });
+
+// Player.maybeBackOffFromEdge's third loop: a move that keeps ground along x alone and along z alone but leaves it
+// diagonally backs off on both axes, 0.05 at a time, until the diagonal move keeps ground too.
+describe("Botcraft sneaking diagonal move at a corner", () => {
+  for (const version of ["1.13.2", "1.20.4"]) {
+    it(`is held back on both axes (${version})`, () => {
+      const start = new Vec3(0.5, 100, 0.5);
+      const rig = createBotcraftPlayerRig({ version, position: start, groundLevel: start.y });
+      const world = createFlatWorld(version, 0);
+      const { stone } = rig.mcData.blocksByName;
+      // ground east and south of the player, none to the south-east
+      world.setOverrideBlock(new Vec3(1, 99, 0), stone.id);
+      world.setOverrideBlock(new Vec3(0, 99, 1), stone.id);
+      rig.playerState.onGround = true;
+      rig.playerState.control.sneak = true;
+      rig.playerState.vel.set(0.9, 0, 0.9);
+      rig.physics.simulate(rig.playerCtx, world as any);
+      const backedOff = 0.9 - 0.05 - 0.05 - 0.05;
+      expect(rig.playerState.pos.x).toBe(0.5 + backedOff);
+      expect(rig.playerState.pos.z).toBe(0.5 + backedOff);
+    });
+  }
+});
+

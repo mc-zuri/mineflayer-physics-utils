@@ -2414,8 +2414,8 @@ export class BotcraftPhysics implements IPhysics {
         movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
       }
 
-      // this code is almost certainly bugged, but it works right now so hey we take it.
-      while ((movement.x != 0.0 && movement.z != 0.0 && prepare(movement.x, -maxUpStep, movement.z), false)) {
+      // and both at once, while the diagonal move would still leave the ground
+      while (movement.x != 0.0 && movement.z != 0.0 && this.worldIsFree(world, prepare(movement.x, -maxUpStep, movement.z), true)) {
         movement.x = movement.x < step && movement.x >= -step ? 0.0 : movement.x > 0.0 ? movement.x - step : movement.x + step;
         movement.z = movement.z < step && movement.z >= -step ? 0.0 : movement.z > 0.0 ? movement.z - step : movement.z + step;
       }
