@@ -120,6 +120,13 @@ export class RiddenMobState extends PlayerState {
   public horseJumping = false;
   public standing = false;
   public allowStandSliding = false;
+  /**
+   * AbstractHorse.isSaddled: a horse its rider controls unsaddled (before 1.19, canPassengerSteer is its first passenger's
+   * alone) goes on its own input
+   */
+  public saddled = true;
+  /** LivingEntity.zza, the mob's own forward input: Mob.setSpeed sets it to the speed, aiStep takes 0.98F of it a tick */
+  public ownForward = 0;
   /** AbstractHorse.standCounter: the ticks the rearing the horse started itself has lasted (or, from 1.21.6, has left) */
   public standCounter = 0;
   /** AbstractHorse.standAnim and standAnimO: its stand animation now and before its last tick (0 - 1, in float) */

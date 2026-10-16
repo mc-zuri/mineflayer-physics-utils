@@ -159,7 +159,8 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     if (mob.noAi && !this.verLessThan("1.21.5") && this.verLessThan("1.21.6")) {
       mob.vel.set(0, 0, 0);
     } else {
-      const airSpeed = Math.fround((this.verLessThan("1.19.4") ? this.legacyFlyingBase(mob, speedBefore) : mob.riddenSpeed) * Math.fround(0.1));
+      const unsaddled = HORSE_TYPES.has(mob.type) && !mob.saddled;
+      const airSpeed = unsaddled ? Math.fround(0.02) : Math.fround((this.verLessThan("1.19.4") ? this.legacyFlyingBase(mob, speedBefore) : mob.riddenSpeed) * Math.fround(0.1));
       this.travelRiddenMob(ctx, world, airSpeed);
     }
 
@@ -437,6 +438,16 @@ export class RiddenMobPhysics extends BotcraftPhysics {
    */
   private tickRiddenHorse(mob: RiddenMobState, rider: RiderInput) {
     const f32 = Math.fround;
+    // AbstractHorse.travel without a saddle: LivingEntity.travel on the horse's own input (its zza, which the last
+    // Mob.setSpeed left at the speed, 0.98F of it each aiStep), at that speed on the ground and 0.02F in the air; it
+    // neither turns to its rider nor jumps
+    if (!mob.saddled) {
+      // (a horse that rears is immobile: LivingEntity.aiStep zeroes its input, AbstractHorse.isImmobile)
+      if (mob.standing) mob.ownForward = 0;
+      mob.ownForward = f32(mob.ownForward * f32(0.98));
+      mob.heading = { forward: mob.ownForward, strafe: 0 };
+      return;
+    }
     const xxa = f32(f32(rider.xxa ?? 0) * f32(0.5));
     let zza = f32(rider.zza ?? 0);
     if (zza <= 0) zza = f32(zza * f32(0.25));
@@ -456,6 +467,8 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       mob.jumpPendingScale = 0;
     }
     mob.riddenSpeed = f32(mob.movementSpeed);
+    // (Mob.setSpeed: the horse's own forward input is its speed)
+    mob.ownForward = mob.riddenSpeed;
   }
 
   /**
