@@ -115,8 +115,14 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     // the air speed was set from the speed of the tick before, since from the new one (getFlyingSpeed).
     const speedBefore = mob.riddenSpeed;
     this.tickRidden(mob, rider);
-    const airSpeed = Math.fround((this.verLessThan("1.19.4") ? speedBefore : mob.riddenSpeed) * Math.fround(0.1));
-    this.travelRiddenMob(ctx, world, airSpeed);
+    // 1.21.5 moves the mob only where it runs its AI (travelRidden: isEffectiveAi, false for a mob without AI; before,
+    // isControlledByLocalInstance, since canSimulateMovement): a mob without AI turns to its rider and stops
+    if (mob.noAi && !this.verLessThan("1.21.5") && this.verLessThan("1.21.6")) {
+      mob.vel.set(0, 0, 0);
+    } else {
+      const airSpeed = Math.fround((this.verLessThan("1.19.4") ? speedBefore : mob.riddenSpeed) * Math.fround(0.1));
+      this.travelRiddenMob(ctx, world, airSpeed);
+    }
 
     // AbstractHorse.travel before 1.19.4: once on the ground after the move, a pending jump is dropped and the jump
     // ends
