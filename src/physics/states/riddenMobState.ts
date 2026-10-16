@@ -99,6 +99,15 @@ export class RiddenMobState extends PlayerState {
   /** SteppedInterpolationHandler (26.3+): where the step starts from (lastStepPosRot) and the ticks into it */
   public lerpStart: Vec3 | null = null;
   public lerpTicks = 0;
+  /**
+   * The rotation the interpolation heads to (yaw, pitch in float degrees; null: the rotation is not interpolated), the
+   * mob's rotation after its last step (InterpolationHandler, 1.21.5+, carries the mob's own turn since into the target)
+   * and, from 26.3, the rotation the step starts from (lastStepPosRot)
+   */
+  public lerpYaw: number | null = null;
+  public lerpPitch = 0;
+  public lerpPreviousRotation: { yaw: number; pitch: number } | null = null;
+  public lerpStartRotation: { yaw: number; pitch: number } | null = null;
   /** Camel, AbstractNautilus: ticks until it can dash again, and whether it dashes (DASH) */
   public dashCooldown = 0;
   public dashing = false;
