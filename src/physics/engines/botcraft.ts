@@ -534,7 +534,8 @@ export class BotcraftPhysics implements IPhysics {
 
   protected fluidPhysics(ctx: EPhysicsCtx, world: World, water: boolean) {
     const player = ctx.state as PlayerState;
-    const collider = getCollider(player.pose, player.pos, player.scale);
+    // (an entity of its own size, a ridden mob: its box)
+    const collider = player.dimensions ? player.getBB() : getCollider(player.pose, player.pos, player.scale);
     const bottom = collider.minY;
     const aabb = collider.expand(-1e-3, -1e-3, -1e-3); // -0.001
     if (water) {
@@ -645,8 +646,14 @@ export class BotcraftPhysics implements IPhysics {
       // normalize and scale
       push.normalize().scale(0.0045000000000000005);
     }
-    // Entity.updateFluidHeightAndDoFluidPushing adds the current only when there is one (a -0 motion stays)
-    if (push.norm() > 0.0) player.vel.add(push);
+    // Entity.updateFluidHeightAndDoFluidPushing adds the current only when there is one (a -0 motion stays), to an
+    // entity the fluid pushes (isPushedByFluid)
+    if (push.norm() > 0.0 && this.isPushedByFluid(player)) player.vel.add(push);
+  }
+
+  /** Entity.isPushedByFluid: whether a fluid's current pushes the entity (Player: unless flying). */
+  protected isPushedByFluid(player: PlayerState): boolean {
+    return !player.flying;
   }
 
   /**

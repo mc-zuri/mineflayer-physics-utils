@@ -5,7 +5,11 @@ import { ControlStateHandler } from "../player/playerControls";
 import { PlayerState } from "./playerState";
 
 /** The mobs a player rides and steers itself: their own movement is LivingEntity.travel with the rider's input. */
-export type RiddenMobType = "pig" | "strider" | "camel" | "happy_ghast" | HorseType;
+export type RiddenMobType = "pig" | "strider" | "camel" | "happy_ghast" | NautilusType | HorseType;
+
+/** The nautiluses a player rides and steers once saddled (AbstractNautilus, 26.1+). */
+export type NautilusType = "nautilus" | "zombie_nautilus";
+export const NAUTILUS_TYPES: ReadonlySet<string> = new Set<NautilusType>(["nautilus", "zombie_nautilus"]);
 
 /** The horses a player rides and steers once saddled (AbstractHorse). */
 export type HorseType = "horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse";
@@ -17,6 +21,8 @@ const DIMENSIONS: Record<RiddenMobType, { width: number; height: number }> = {
   strider: { width: Math.fround(0.9), height: Math.fround(1.7) },
   camel: { width: Math.fround(1.7), height: Math.fround(2.375) },
   happy_ghast: { width: 4, height: 4 },
+  nautilus: { width: Math.fround(0.875), height: Math.fround(0.95) },
+  zombie_nautilus: { width: Math.fround(0.875), height: Math.fround(0.95) },
   horse: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
   donkey: { width: Math.fround(1.3964844), height: Math.fround(1.5) },
   mule: { width: Math.fround(1.3964844), height: Math.fround(1.6) },
@@ -30,6 +36,8 @@ const MOVEMENT_SPEED: Record<RiddenMobType, number> = {
   strider: 0.17499999701976776,
   camel: 0.09000000357627869,
   happy_ghast: 0.05,
+  nautilus: 1,
+  zombie_nautilus: 1.100000023841858,
   horse: 0.22499999403953552,
   donkey: 0.17499999701976776,
   mule: 0.17499999701976776,
@@ -61,7 +69,7 @@ export class RiddenMobState extends PlayerState {
   public movementSpeed: number;
   /** HappyGhast: the FLYING_SPEED attribute's value (createAttributes: 0.05) */
   public flyingSpeed = 0.05;
-  /** HappyGhast: what getRiddenInput took from the rider this tick (strafe, up, forward), the travel's input */
+  /** HappyGhast, AbstractNautilus: what getRiddenInput took from the rider this tick (strafe, up, forward), the travel's input */
   public riddenInput = new Vec3(0, 0, 0);
   /** LivingEntity.speed: what the last travelRidden set (getRiddenSpeed) */
   public riddenSpeed = 0;

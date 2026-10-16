@@ -3,7 +3,8 @@ import { world } from "prismarine-world";
 import { Vec3 } from "vec3";
 import * as math from "../info/math";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
-import { HORSE_TYPES, RiddenMobState } from "../states/riddenMobState";
+import { HORSE_TYPES, NAUTILUS_TYPES, RiddenMobState } from "../states/riddenMobState";
+import { PlayerState } from "../states/playerState";
 import { floatRadians } from "../../util/mth";
 import { BotcraftPhysics } from "./botcraft";
 
@@ -133,6 +134,12 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       }
     }
 
+    // AbstractNautilus.tick, after the move: the dash ends 5 ticks in, its cooldown runs down
+    if (NAUTILUS_TYPES.has(mob.type)) {
+      if (mob.dashing && mob.dashCooldown < 35) mob.dashing = false;
+      if (mob.dashCooldown > 0) mob.dashCooldown--;
+    }
+
     // Camel.tick, after the move: the dash ends on landing, its cooldown runs down
     if (mob.type === "camel") {
       if (mob.dashing && mob.dashCooldown < 50 && (mob.onGround || mob.isInWater || mob.isInLava)) mob.dashing = false;
@@ -190,6 +197,10 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       case "happy_ghast":
         this.tickRiddenHappyGhast(mob, rider);
         return;
+      case "nautilus":
+      case "zombie_nautilus":
+        this.tickRiddenNautilus(mob, rider);
+        return;
     }
     if (HORSE_TYPES.has(mob.type)) this.tickRiddenHorse(mob, rider);
   }
@@ -229,6 +240,77 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
     mob.pitch = -mob.pitchDegrees * (Math.PI / 180);
     mob.riddenSpeed = f32(f32(f32(mob.flyingSpeed) * 5) / 3);
+  }
+
+  /**
+   * A saddled nautilus's part of its ridden travel (26.1+, AbstractNautilus). getRiddenInput: the rider's strafe as it
+   * is; with a forward or back input, along the rider's pitch (cos forward, -sin up), half of it and reversed
+   * backwards. tickRidden: it turns half the way to its rider's yaw (Mth.wrapDegrees) and takes half the rider's pitch
+   * (Entity.setRot keeps both within 360); the dash the rider asked for goes off (executeRidersJump). getRiddenSpeed:
+   * 0.0325F * MOVEMENT_SPEED in water, 0.02F * it out of water.
+   */
+  private tickRiddenNautilus(mob: RiddenMobState, rider: RiderInput) {
+    const f32 = Math.fround;
+    const strafe = f32(rider.xxa ?? 0);
+    const zza = f32(rider.zza ?? 0);
+    let forward = 0;
+    let up = 0;
+    if (zza !== 0) {
+      const pitch = floatRadians(rider.pitchDegrees);
+      let forwardLook = this.mth.cos(pitch);
+      let upLook = -this.mth.sin(pitch);
+      if (zza < 0) {
+        forwardLook = f32(forwardLook * f32(-0.5));
+        upLook = f32(upLook * f32(-0.5));
+      }
+      up = upLook;
+      forward = forwardLook;
+    }
+    mob.riddenInput = new Vec3(strafe, up, forward);
+
+    let yRot = f32(mob.yawDegrees ?? 0);
+    const diff = wrapDegreesF(f32(f32(rider.yawDegrees) - yRot));
+    yRot = f32(yRot + f32(diff * f32(0.5)));
+    mob.yawDegrees = f32(yRot % 360);
+    mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
+    mob.pitch = -mob.pitchDegrees * (Math.PI / 180);
+    // (the client never makes its mount jump itself: isJumping is false)
+    if (mob.jumpPendingScale > 0) this.nautilusDash(mob, mob.jumpPendingScale, rider);
+    mob.jumpPendingScale = 0;
+    mob.riddenSpeed = f32(f32(mob.isInWater ? 0.0325 : 0.02) * f32(mob.movementSpeed));
+  }
+
+  /**
+   * AbstractNautilus.executeRidersJump: a push along the rider's look (Entity.calculateViewVector), (1.2F in water,
+   * 0.5F out of it) * the charge * MOVEMENT_SPEED * the block's speed factor; the dash and its 40-tick cooldown start.
+   */
+  private nautilusDash(mob: RiddenMobState, scale: number, rider: RiderInput) {
+    const f32 = Math.fround;
+    const look = this.riderLook(rider);
+    const momentum = f32(f32(mob.isInWater ? 1.2 : 0.5) * scale) * mob.movementSpeed * this.getBlockSpeedFactor(mob, this.colliderWorld!);
+    mob.vel.translate(look.x * momentum, look.y * momentum, look.z * momentum);
+    mob.dashCooldown = 40;
+    mob.dashing = true;
+  }
+
+  /** Entity.calculateViewVector of the rider's look (getLookAngle), in float. */
+  private riderLook(rider: RiderInput): { x: number; y: number; z: number } {
+    const f32 = Math.fround;
+    const pitch = floatRadians(rider.pitchDegrees);
+    const yaw = f32(f32(-f32(rider.yawDegrees)) * f32(0.017453292));
+    const yCos = this.mth.cos(yaw);
+    const ySin = this.mth.sin(yaw);
+    const xCos = this.mth.cos(pitch);
+    const xSin = this.mth.sin(pitch);
+    return { x: f32(ySin * xCos), y: -xSin, z: f32(yCos * xCos) };
+  }
+
+  /**
+   * The DASH flag the server synced (onSyncedDataUpdated): a nautilus whose cooldown had run out starts it again.
+   */
+  syncDash(mob: RiddenMobState, dashing: boolean) {
+    mob.dashing = dashing;
+    if (NAUTILUS_TYPES.has(mob.type) && mob.dashCooldown === 0) mob.dashCooldown = 40;
   }
 
   /**
@@ -422,6 +504,14 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       mob.jumpPendingScale = percent >= 90 ? 1 : f32(f32(0.4) + f32(f32(f32(0.4) * percent) / f32(90)));
       return;
     }
+    // AbstractNautilus.onPlayerJump: saddled, with its cooldown run out, it dashes at its next tick
+    if (NAUTILUS_TYPES.has(mob.type)) {
+      if (mob.dashCooldown > 0) return;
+      const f32 = Math.fround;
+      const percent = Math.max(0, power);
+      mob.jumpPendingScale = percent >= 90 ? 1 : f32(f32(0.4) + f32(f32(f32(0.4) * percent) / f32(90)));
+      return;
+    }
     if (mob.type !== "camel" || mob.dashCooldown > 0 || !mob.onGround) return;
     const f32 = Math.fround;
     const percent = Math.max(0, power);
@@ -468,6 +558,12 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     return super.collisionShapes(block, pos);
   }
 
+  /** AbstractNautilus.isPushedByFluid: no current moves a nautilus. */
+  protected isPushedByFluid(player: PlayerState): boolean {
+    if (player instanceof RiddenMobState && NAUTILUS_TYPES.has(player.type)) return false;
+    return super.isPushedByFluid(player);
+  }
+
   /** Strider.checkFallDamage: a strider in lava skips LivingEntity.checkFallDamage and its look at the fluids. */
   protected fluidsAfterMove(ctx: EPhysicsCtx, world: World) {
     const mob = ctx.state;
@@ -505,6 +601,14 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       this.travelHappyGhast(ctx, world);
       return;
     }
+    // AbstractNautilus.travelInWater: its input at its speed, the move, then 0.9 of the motion kept (no gravity)
+    const nautilus = NAUTILUS_TYPES.has(mob.type);
+    if (nautilus && mob.isInWater) {
+      this.moveRelative3d(mob.riddenSpeed, mob.riddenInput, mob);
+      this.applyMovement(ctx, world);
+      mob.vel.scale(0.9);
+      return;
+    }
     // LivingEntity.shouldTravelInFluid: not in a fluid it stands on (a strider in lava)
     const standsOnFluid = mob.type === "strider" && this.isLava(world.getBlock(mob.pos.floored()));
     if ((mob.isInWater || mob.isInLava) && !standsOnFluid) {
@@ -523,7 +627,9 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     const friction = (blockBelow ? this.blockSlipperiness[blockBelow.type] : undefined) ?? ctx.worldSettings.defaultSlipperiness;
     const inertia = mob.onGround ? f32(f32(friction) * f32(0.91)) : f32(0.91);
     const inputStrength = mob.onGround ? this.getFrictionInfluencedSpeed(mob.riddenSpeed, friction) : airSpeed;
-    this.applyInputs(inputStrength, mob);
+    // (a nautilus's input has its up along the rider's look)
+    if (nautilus) this.moveRelative3d(inputStrength, mob.riddenInput, mob);
+    else this.applyInputs(inputStrength, mob);
 
     // LivingEntity.handleOnClimbable
     mob.onClimbable = this.isInClimbable(mob, world);
