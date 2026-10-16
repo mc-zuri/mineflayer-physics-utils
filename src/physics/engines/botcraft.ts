@@ -1793,7 +1793,11 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     const sprinting = this.verLessThan("1.19.4") ? sprintedBefore : player.sprinting;
-    return sprinting ? Math.fround(0.025999999) : Math.fround(0.02);
+    if (!sprinting) return Math.fround(0.02);
+    // Player.aiStep: 0.02F + 0.006F in floats on 1.18.2 - 1.19.3 (0.026000000536441803); before, 0.02F plus the
+    // double 0.005999999865889549D cast back to a float, the 0.025999999F of Player.getFlyingSpeed since
+    if (!this.verLessThan("1.18.2") && this.verLessThan("1.19.4")) return Math.fround(Math.fround(0.02) + Math.fround(0.006));
+    return Math.fround(0.025999999);
   }
 
   protected getBlockBelowAffectingMovement(entity: IEntityState, world: World) {
