@@ -93,13 +93,15 @@ describe("RiddenMobPhysics strider", () => {
   // 1.15F * sin) and Strider.getSteeringSpeed is MOVEMENT_SPEED, which the client gives no suffocating modifier, * 0.55F,
   // or 0.23F suffocating: the recorded speed at ticks 36 (boost tick 14 of 171, warm) and 37 (15 of 171, off the lava)
   it("boosts its float steering speed, 0.23F of it suffocating (1.16.5, c_ride_strider_boost ticks 36 and 37)", () => {
+    // (warm standing on the lava, suffocating on the stone)
     const boosted = (suffocating: boolean, boostTime: number) => {
-      const rig = createRiddenMobRig({ version: "1.16.5", type: "strider", pos: [0.5, 101, 0.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
-      rig.state.noAi = true;
-      rig.state.suffocating = suffocating;
+      const pos: [number, number, number] = suffocating ? [0.5, 101, 0.5] : [0.5, 100.5, 1937.5];
+      const rig = createRiddenMobRig({ version: "1.16.5", type: "strider", pos, vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
       rig.state.startBoost(171);
       rig.state.boostTime = boostTime;
-      rig.physics.simulateRidden(rig.ctx, createFlatWorld("1.16.5", 101) as any, { yawDegrees: 270, pitchDegrees: 0 });
+      const world = suffocating ? createFlatWorld("1.16.5", 101) : lavaPool("1.16.5", rig.mcData.blocksByName.lava.id);
+      rig.physics.simulateRidden(rig.ctx, world as any, { yawDegrees: 270, pitchDegrees: 0 });
+      expect(rig.state.suffocating).toBe(suffocating);
       return rig.state.riddenSpeed;
     };
     expect(boosted(false, 13)).toBe(0.1243988648056984);
@@ -116,5 +118,16 @@ describe("RiddenMobPhysics strider", () => {
     rig.physics.simulateRidden(rig.ctx, createFlatWorld("1.19.3", 101) as any, { yawDegrees: 270, pitchDegrees: 0 });
     expect(rig.state.pos.x).toBe(10.927305296446738);
     expect(rig.state.vel.x).toBe(0.08976073923403174);
+  });
+
+  // m_c_mount_click_strider: a strider summoned without AI on stone. Strider.tick sets its suffocating only with AI from
+  // 1.19 (isNoAi); 1.18.2 suffocates it off the warm blocks all the same, at 0.23F of its speed
+  it("suffocates off the warm blocks without AI until 1.19 (m_c_mount_click_strider)", () => {
+    for (const [version, suffocates] of [["1.18.2", true], ["1.19", false]] as const) {
+      const rig = createRiddenMobRig({ version, type: "strider", pos: [2.5, 101, 3159.5], vel: [0, 0, 0], yawDegrees: 90, onGround: false });
+      rig.state.noAi = true;
+      rig.physics.simulateRidden(rig.ctx, createFlatWorld(version, 101) as any, { yawDegrees: 270, pitchDegrees: 21.05699920654297 });
+      expect(rig.state.suffocating).toBe(suffocates);
+    }
   });
 });
