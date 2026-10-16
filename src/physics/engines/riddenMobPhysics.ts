@@ -158,7 +158,7 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     if (mob.noAi && !this.verLessThan("1.21.5") && this.verLessThan("1.21.6")) {
       mob.vel.set(0, 0, 0);
     } else {
-      const airSpeed = Math.fround((this.verLessThan("1.19.4") ? speedBefore : mob.riddenSpeed) * Math.fround(0.1));
+      const airSpeed = Math.fround((this.verLessThan("1.19.4") ? this.legacyFlyingBase(mob, speedBefore) : mob.riddenSpeed) * Math.fround(0.1));
       this.travelRiddenMob(ctx, world, airSpeed);
     }
 
@@ -679,6 +679,17 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     const mob = ctx.state;
     if (mob instanceof RiddenMobState && mob.type === "strider" && mob.isInLava) return;
     super.fluidsAfterMove(ctx, world);
+  }
+
+  /**
+   * The speed ItemSteerable.travel takes the air speed from before 1.19.4 (flyingSpeed = getSpeed() * 0.1F, before it
+   * sets the steering speed): the speed of the tick before, but a strider's Strider.travel sets it first to its move
+   * speed (MOVEMENT_SPEED, * 0.66F while suffocating, in float).
+   */
+  private legacyFlyingBase(mob: RiddenMobState, speedBefore: number): number {
+    if (mob.type !== "strider") return speedBefore;
+    const f32 = Math.fround;
+    return f32(f32(mob.movementSpeed) * (mob.suffocating ? f32(0.66) : 1));
   }
 
   /** ItemBasedSteering.tickBoost: the boost ends once its time has run out. */

@@ -105,4 +105,16 @@ describe("RiddenMobPhysics strider", () => {
     expect(boosted(false, 13)).toBe(0.1243988648056984);
     expect(boosted(true, 14)).toBe(0.05284333974123001);
   });
+
+  // c_ride_strider_boost (1.19.3, tick 22): stepping off the lava the strider is in the air for a tick; before 1.19.4
+  // Strider.travel sets its speed to its move speed (MOVEMENT_SPEED, not suffocating) before ItemSteerable.travel takes
+  // the air speed from it (flyingSpeed = getSpeed() * 0.1F), not the steering speed of the tick before
+  it("flies at a tenth of its move speed in the air (1.19.3, c_ride_strider_boost tick 22)", () => {
+    const rig = createRiddenMobRig({ version: "1.19.3", type: "strider", pos: [10.828667124307021, 101.01058399925232, 1937.5], vel: [0.08279405312776682, -0.06802768205673218, 0], yawDegrees: 270, onGround: false });
+    rig.state.noAi = true;
+    rig.state.riddenSpeed = 0.09624999761581421;
+    rig.physics.simulateRidden(rig.ctx, createFlatWorld("1.19.3", 101) as any, { yawDegrees: 270, pitchDegrees: 0 });
+    expect(rig.state.pos.x).toBe(10.927305296446738);
+    expect(rig.state.vel.x).toBe(0.08976073923403174);
+  });
 });
