@@ -79,6 +79,8 @@ export class RiddenMobState extends PlayerState {
   public boostTimeTotal = 0;
   /** Strider: off the warm blocks (DATA_SUFFOCATING) */
   public suffocating = false;
+  /** Mob.isNoAi (its flags' bit 1): a strider without AI keeps the suffocating it was synced */
+  public noAi = false;
   /** Camel (AbstractHorse): the JUMP_STRENGTH attribute's value, the dash the rider asked for (playerJumpPendingScale) */
   public jumpStrength = 0.41999998688697815;
   public jumpPendingScale = 0;

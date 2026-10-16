@@ -60,4 +60,32 @@ describe("RiddenMobPhysics strider", () => {
       expect(rig.state.vel.x).toBe(tick52.vx);
     });
   }
+
+  // Strider.tick sets DATA_SUFFOCATING from the warm blocks only when !isNoAi(): a strider without AI keeps what the
+  // server synced, and getRiddenSpeed follows that (MOVEMENT_SPEED * 0.55F, or less 34% of the base * 0.35F).
+  const f32 = Math.fround;
+  const SPEED = 0.17499999701976776;
+  for (const version of ["1.21.11", "26.3"]) {
+    it(`keeps the suffocating the server synced without AI (${version}, Strider.tick isNoAi)`, () => {
+      const onStone = () => createRiddenMobRig({ version, type: "strider", pos: [0.5, 101, 0.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+      const stone = createFlatWorld(version, 101);
+      // with AI, off the warm blocks it suffocates
+      const ai = onStone();
+      ai.physics.simulateRidden(ai.ctx, stone as any, { yawDegrees: 270, pitchDegrees: 0 });
+      expect(ai.state.suffocating).toBe(true);
+      expect(ai.state.riddenSpeed).toBe(f32((SPEED + SPEED * -0.3400000035762787) * f32(0.35)));
+      // without AI, it stays as synced (not suffocating) on stone ...
+      const noAi = onStone();
+      noAi.state.noAi = true;
+      noAi.physics.simulateRidden(noAi.ctx, stone as any, { yawDegrees: 270, pitchDegrees: 0 });
+      expect(noAi.state.suffocating).toBe(false);
+      expect(noAi.state.riddenSpeed).toBe(f32(SPEED * f32(0.55)));
+      // ... and suffocating on lava
+      const onLava = createRiddenMobRig({ version, type: "strider", pos: [0.5, 100.5, 1937.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+      onLava.state.noAi = true;
+      onLava.state.suffocating = true;
+      onLava.physics.simulateRidden(onLava.ctx, lavaPool(version, onLava.mcData.blocksByName.lava.id) as any, { yawDegrees: 270, pitchDegrees: 0 });
+      expect(onLava.state.suffocating).toBe(true);
+    });
+  }
 });

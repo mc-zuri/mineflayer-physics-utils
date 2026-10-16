@@ -66,7 +66,7 @@ export class RiddenMobPhysics extends BotcraftPhysics {
   private tickRiddenMob(ctx: EPhysicsCtx, world: World, rider: RiderInput) {
     const mob = ctx.state as RiddenMobState;
     // Strider.tick: the strider suffocates off the warm blocks (lava, by the fluid contact of the tick before)
-    if (mob.type === "strider") mob.suffocating = !this.isWarmForStrider(mob, world);
+    if (mob.type === "strider" && !mob.noAi) mob.suffocating = !this.isWarmForStrider(mob, world);
 
     // Entity.baseTick: the water and lava contact the move starts from
     this.fluidPhysics(ctx, world, true);
