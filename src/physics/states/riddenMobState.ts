@@ -87,7 +87,10 @@ export class RiddenMobState extends PlayerState {
   public lerpSteps = 0;
   /** InterpolationHandler (1.21.5+): where the last step left the mob, to carry its own moves into the target */
   public lerpPrevious: Vec3 | null = null;
-  /** Camel: ticks until it can dash again, and whether it dashes (DASH) */
+  /** SteppedInterpolationHandler (26.3+): where the step starts from (lastStepPosRot) and the ticks into it */
+  public lerpStart: Vec3 | null = null;
+  public lerpTicks = 0;
+  /** Camel, AbstractNautilus: ticks until it can dash again, and whether it dashes (DASH) */
   public dashCooldown = 0;
   public dashing = false;
   /** Camel: sitting, and the ticks since it last sat down or stood up (getPoseTime) */

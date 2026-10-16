@@ -127,4 +127,21 @@ describe("RiddenMobPhysics teleport", () => {
     }
     expect(shown).toEqual([0.8333333333333333, 1.1666666666666665, 1.5, 1.5]);
   });
+
+  // m_horse on 26.3: SteppedInterpolationHandler steps from where the move started (lastStepPosRot) by a float share
+  // of its 3 ticks (currentStepTicks / 3 in getNewPositionAndRotation's Vec3.lerp), so the horse is 0.5 + 1/3F and
+  // 0.5 + 2/3F along, not a third of what is left each tick.
+  it("steps a ridden horse to the server's teleport from where it started (26.3, m_horse ticks 24 - 27)", () => {
+    const world = createFlatWorld("26.3", 101);
+    const { physics, state, ctx } = createRiddenMobRig({ version: "26.3", type: "horse", pos: [0.5, 101, 2839.5], vel: [0, -0.0784000015258789, 0], yawDegrees: 270 });
+    state.movementSpeed = 0.2;
+    physics.teleportRidden(state, state.pos.offset(1, 0, 0));
+    const shown: number[] = [];
+    for (let t = 0; t < 4; t++) {
+      physics.simulateRidden(ctx, world as any, { yawDegrees: 270, pitchDegrees: 0, xxa: 0, zza: 0 });
+      shown.push(state.pos.x);
+      if (t === 0) expect(physics.lerpTargetOf(state).x).toBe(1.5);
+    }
+    expect(shown).toEqual([0.8333333432674408, 1.1666666865348816, 1.5, 1.5]);
+  });
 });

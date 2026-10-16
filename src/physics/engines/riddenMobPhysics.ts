@@ -80,8 +80,20 @@ export class RiddenMobPhysics extends BotcraftPhysics {
       const n = mob.lerpSteps;
       const p = mob.pos;
       // InterpolationHandler.interpolate (1.21.5+): the mob's own move since the last step goes with the target
-      if (!this.verLessThan("1.21.5") && mob.lerpPrevious) t.add(p.minus(mob.lerpPrevious));
-      if (this.verLessThan("1.20.2")) p.set(p.x + (t.x - p.x) / n, p.y + (t.y - p.y) / n, p.z + (t.z - p.z) / n);
+      if (!this.verLessThan("1.21.5") && mob.lerpPrevious) {
+        const moved = p.minus(mob.lerpPrevious);
+        t.add(moved);
+        mob.lerpStart?.add(moved);
+      }
+      if (!this.verLessThan("26.3") && mob.lerpStart) {
+        // SteppedInterpolationHandler (26.3+): along the step from where it started by a float share of its ticks
+        // (getNewPositionAndRotation's Vec3.lerp), at the target once they are all gone
+        const s = mob.lerpStart;
+        const a = Math.fround(mob.lerpTicks / 3);
+        if (mob.lerpTicks < 3) p.set(s.x + (t.x - s.x) * a, s.y + (t.y - s.y) * a, s.z + (t.z - s.z) * a);
+        else p.set(t.x, t.y, t.z);
+        mob.lerpTicks++;
+      } else if (this.verLessThan("1.20.2")) p.set(p.x + (t.x - p.x) / n, p.y + (t.y - p.y) / n, p.z + (t.z - p.z) / n);
       else p.set(p.x + (1 / n) * (t.x - p.x), p.y + (1 / n) * (t.y - p.y), p.z + (1 / n) * (t.z - p.z));
       mob.lerpSteps--;
       mob.lerpPrevious = p.clone();
@@ -452,6 +464,12 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     mob.lerpTarget = target.clone();
     mob.lerpSteps = 3;
     mob.lerpPrevious = mob.pos.clone();
+    // 26.3+: one step of the update interval (3 ticks) from where the mob is (SteppedInterpolationHandler: its first
+    // tick a third of the way)
+    if (!this.verLessThan("26.3")) {
+      mob.lerpStart = mob.pos.clone();
+      mob.lerpTicks = 1;
+    }
   }
 
   /** Where the mob is headed (Entity.lerpTargetX, what the vehicle move reports): the teleport's target while it runs. */
