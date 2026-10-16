@@ -186,10 +186,11 @@ export class BotcraftPhysics implements IPhysics {
     // BlockTags.CLIMBABLE (1.16+; ladder, vine and scaffolding before): each block from the version that adds it
     const climbables = ["ladder", "vine", "scaffolding", "weeping_vines", "weeping_vines_plant", "twisting_vines",
       "twisting_vines_plant", "cave_vines", "cave_vines_plant"];
-    // bamboo (1.14+, Block.getMaxHorizontalOffset 0.25F) and pointed dripstone (1.17+, 0.125F)
+    // bamboo (1.14+, Block.getMaxHorizontalOffset 0.25F), pointed dripstone (1.17+, 0.125F) and sulfur spike (26.2+, 0.125F)
     this.offsetBlocks = new Map();
     if (blocksByName.bamboo) this.offsetBlocks.set(blocksByName.bamboo.id, 0.25);
     if (blocksByName.pointed_dripstone) this.offsetBlocks.set(blocksByName.pointed_dripstone.id, 0.125);
+    if (blocksByName.sulfur_spike) this.offsetBlocks.set(blocksByName.sulfur_spike.id, 0.125); // 26.2+
     this.climbableIds = new Set(climbables.filter((name) => blocksByName[name] != null).map((name) => blocksByName[name].id));
     this.airId = blocksByName.air.id;
     this.waterLike = new Set();

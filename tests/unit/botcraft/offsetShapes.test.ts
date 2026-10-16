@@ -31,4 +31,20 @@ describe("Botcraft offset block shapes", () => {
       expect(state.onGround).toBe(true);
     });
   }
+
+  // 26.2's sulfur spike is offset as pointed dripstone is (OffsetType.XZ, getMaxHorizontalOffset 0.125F; its shapes
+  // are the dripstone's), so its tips stand where the dripstone tips of the same column would.
+  for (const version of ["26.2", "26.3"]) {
+    it(`moves a sulfur spike by its column's offset as a dripstone tip (${version})`, () => {
+      const { Block } = loadMcData(version);
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(5.5, 101, 1425.5) });
+      const props = { vertical_direction: "up", thickness: "tip", waterlogged: "false" };
+      const spike = Block.fromProperties("sulfur_spike", props, 0);
+      const tip = Block.fromProperties("pointed_dripstone", props, 0);
+      const pos = new Vec3(5, 101, 1425);
+      const shapes = (block: any) => (rig.physics as any).collisionShapes(block, pos);
+      expect(shapes(spike)).toEqual(shapes(tip));
+      expect(shapes(spike)).not.toEqual(spike.shapes);
+    });
+  }
 });
