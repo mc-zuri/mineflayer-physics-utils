@@ -51,6 +51,27 @@ describe("Botcraft entity collision", () => {
     });
   }
 
+  // 1.14 - 1.16 tick an entity whose slot comes after the player's first (Int2ObjectOpenHashMap): the player moves
+  // against it where its tick left it (afterTick), here a shulker moved 0.003 out of the way (as the boat pushed before
+  // the player's move in n_walk_into_boat on 1.15.2, tick 11); before 1.14 (the player first) it stops at its box (its float half width)
+  for (const [version, x] of [["1.15.2", 2.514], ["1.12.2", 2.512499988079071]] as const) {
+    it(`meets an entity ticked before it where its tick left it (${version})`, () => {
+      const world = createFlatWorld(version, 101);
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(2.5, 101, 38.5) });
+      rig.playerState.vel.set(0.014, -0.0784000015258789, 0);
+      rig.playerState.onGround = true;
+      const at = (minX: number) => new AABB(minX, 101, 38, minX + 1, 102, 39);
+      rig.playerState.nearbyEntities = [{
+        name: "shulker", living: true, position: new Vec3(3.3125, 101, 38.5), boundingBox: at(2.8125),
+        ticksBeforePlayer: version === "1.15.2", afterTick: { position: new Vec3(3.315478515625, 101, 38.5), boundingBox: at(2.815478515625) },
+      }];
+
+      rig.physics.simulate(rig.playerCtx, world as any);
+
+      expect(rig.playerState.pos.x).toBe(x);
+    });
+  }
+
   // A grown happy ghast (1.21.6+, HappyGhast.canBeCollidedWith) is solid on its still timeout, and on the client to a
   // player whose feet are at or above its top. A player's packet log on 26.3: getting off the ghast at 126.998,
   // 65.191, 166.449 (4 by 4), the server put the rider on its top, y 69.19112078830571; the client fell into the ghast
