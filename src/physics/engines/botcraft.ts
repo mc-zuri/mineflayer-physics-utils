@@ -1601,7 +1601,8 @@ export class BotcraftPhysics implements IPhysics {
       }
     }
 
-    const hasLevitationEffect = player.levitation > 0;
+    // (Player.tryToStartFallFlying does not start under levitation from 1.16; 1.15's does)
+    const hasLevitationEffect = player.levitation > 0 && !this.verLessThan("1.16");
 
     // LocalPlayer.aiStep: since 1.15 tryToStartFallFlying starts gliding on the client at once; before, the client
     // only asks and the server's entity data starts it
