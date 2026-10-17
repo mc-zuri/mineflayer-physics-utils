@@ -18,6 +18,7 @@ import { javaTrig } from "../../util/javaTrig";
 import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
+import { LegacyShapes } from "./legacyShapes";
 import { PlayerPoses, PlayerState, convInpToAxes, getCollider } from "../states";
 import { PhysicsWorldSettings } from "../settings";
 
@@ -136,6 +137,8 @@ export class BotcraftPhysics implements IPhysics {
   protected offsetBlocks: Map<number, number>;
   /** The player simulated, whose collision context shapes the blocks it collides with (EntityCollisionContext). */
   protected collider: PlayerState | null = null;
+  /** Before 1.13, the shapes the client takes from the blocks around (fences, panes, walls, stairs, doors, ...). */
+  protected readonly legacyShapes: LegacyShapes;
   protected bubblecolumnId: number;
   protected airId: number;
   protected waterLike: Set<number>;
@@ -148,6 +151,7 @@ export class BotcraftPhysics implements IPhysics {
 
   constructor(mcData: md.IndexedData) {
     this.data = mcData;
+    this.legacyShapes = new LegacyShapes(mcData);
     const blocksByName = mcData.blocksByName;
     this.supportFeature = makeSupportFeature(mcData);
     this.mth = mthFor(!this.verLessThan("1.21.11"));
@@ -253,7 +257,7 @@ export class BotcraftPhysics implements IPhysics {
           const block = world.getBlock(cursor) as Block | null;
           if (block != null) {
             const blockPos = block.position;
-            for (const shape of this.collisionShapes(block, blockPos)) {
+            for (const shape of this.collisionShapes(block, blockPos, world)) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
               blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
               surroundingBBs.push(blockBB);
@@ -265,8 +269,15 @@ export class BotcraftPhysics implements IPhysics {
     return surroundingBBs;
   }
 
-  /** The block's collision shapes where it is, for the player simulated. */
-  protected collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
+  /**
+   * The block's collision shapes where it is, for the player simulated. Before 1.13 a block whose shape the client takes
+   * from its neighbours (LegacyShapes) has it from the world's blocks around, when the world is given.
+   */
+  protected collisionShapes(block: Block, pos: Vec3, world?: World): AABBPoints[] {
+    if (world != null && this.legacyShapes.enabled) {
+      const shapes = this.legacyShapes.shapes(block.type, block.metadata, (dx, dy, dz) => world.getBlock(pos.offset(dx, dy, dz)));
+      if (shapes != null) return shapes;
+    }
     if (block.type === this.scaffoldId && this.collider) return this.scaffoldingShapes(block, this.collider) as AABBPoints[];
     if (block.type === this.powderSnowId && this.collider) return this.powderSnowShapes(pos, this.collider) as AABBPoints[];
     const maxOffset = this.offsetBlocks.get(block.type);
@@ -3123,7 +3134,7 @@ export class BotcraftPhysics implements IPhysics {
       for (cursor.z = Math.floor(query.minZ); cursor.z <= Math.floor(query.maxZ); ++cursor.z) {
         for (cursor.x = Math.floor(query.minX); cursor.x <= Math.floor(query.maxX); ++cursor.x) {
           const block = world.getBlock(cursor) as Block | null;
-          const shapes = outsideBorder(cursor.x, cursor.z) ? [[0, 0, 0, 1, 1, 1]] : block ? this.collisionShapes(block, cursor) : [];
+          const shapes = outsideBorder(cursor.x, cursor.z) ? [[0, 0, 0, 1, 1, 1]] : block ? this.collisionShapes(block, cursor, world) : [];
           const boxes = shapes.map((shape) => new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z));
           if (!voxels) {
             partial.push(...boxes.filter((box) => box.intersects(query)));
@@ -3194,7 +3205,7 @@ export class BotcraftPhysics implements IPhysics {
         for (cursor.x = Math.floor(query.minX - 1e-7) - 1; cursor.x <= Math.floor(query.maxX + 1e-7) + 1; cursor.x++) {
           const block = world.getBlock(cursor);
           if (block == null) continue;
-          const shapes = this.collisionShapes(block, cursor);
+          const shapes = this.collisionShapes(block, cursor, world);
           if (shapes.length === 0) continue;
           const boxes = shapes.map((shape) => AABB.fromShape(shape).translate(cursor.x, cursor.y, cursor.z));
           if (!boxes.some((box) => box.intersects(query))) continue;
@@ -3565,7 +3576,7 @@ export class BotcraftPhysics implements IPhysics {
           if (edges >= 2) continue; // only moving pistons count there
           const block = world.getBlock(cursor);
           if (block == null) continue;
-          const shapes = this.collisionShapes(block, cursor).map((shape) => AABB.fromShape(shape));
+          const shapes = this.collisionShapes(block, cursor, world).map((shape) => AABB.fromShape(shape));
           if (edges === 1 && !shapes.some((s) => s.minX < 0 || s.minY < 0 || s.minZ < 0 || s.maxX > 1 || s.maxY > 1 || s.maxZ > 1)) continue;
           if (!shapes.some((shape) => box.intersects(shape.translate(cursor.x, cursor.y, cursor.z)))) continue;
           const dx = cursor.x + 0.5 - position.x;
