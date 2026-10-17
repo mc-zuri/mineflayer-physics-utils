@@ -159,7 +159,7 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     if (mob.noAi && !this.verLessThan("1.21.5") && this.verLessThan("1.21.6")) {
       mob.vel.set(0, 0, 0);
     } else {
-      const unsaddled = HORSE_TYPES.has(mob.type) && !mob.saddled;
+      const unsaddled = (HORSE_TYPES.has(mob.type) || mob.type === "pig") && !mob.saddled;
       const airSpeed = unsaddled ? Math.fround(0.02) : Math.fround((this.verLessThan("1.19.4") ? this.legacyFlyingBase(mob, speedBefore) : mob.riddenSpeed) * Math.fround(0.1));
       this.travelRiddenMob(ctx, world, airSpeed);
     }
@@ -230,6 +230,13 @@ export class RiddenMobPhysics extends BotcraftPhysics {
     const f32 = Math.fround;
     switch (mob.type) {
       case "pig": {
+        // before 1.11 a pig its rider controls (its first passenger) without its stick goes on its own input as an
+        // unsaddled horse does (EntityPig.moveEntityWithHeading: not canBeSteered), stepping 0.5
+        if (!mob.saddled) {
+          mob.ownForward = f32(mob.ownForward * f32(0.98));
+          mob.heading = { forward: mob.ownForward, strafe: 0 };
+          return;
+        }
         // Pig.tickRidden: setRot(rider yaw, rider pitch * 0.5F) (Entity.setRot keeps the yaw within 360)
         mob.yawDegrees = f32(f32(rider.yawDegrees) % 360);
         mob.pitchDegrees = f32(f32(f32(rider.pitchDegrees) * f32(0.5)) % 360);
@@ -243,6 +250,8 @@ export class RiddenMobPhysics extends BotcraftPhysics {
         } else {
           mob.riddenSpeed = f32(mob.movementSpeed * 0.225 * this.boostFactor(mob));
         }
+        // (Mob.setSpeed: its own forward input is its speed)
+        mob.ownForward = mob.riddenSpeed;
         return;
       }
       case "strider": {
@@ -730,7 +739,7 @@ export class RiddenMobPhysics extends BotcraftPhysics {
   protected travelRiddenMob(ctx: EPhysicsCtx, world: World, airSpeed: number) {
     const mob = ctx.state as RiddenMobState;
     // the ridden step height: at least 1 (LivingEntity.maxUpStep with a player in control)
-    ctx.stepHeight = Math.max(mob.type === "camel" ? 1.5 : 0.6, 1);
+    ctx.stepHeight = mob.type === "pig" && !mob.saddled ? 0.5 : Math.max(mob.type === "camel" ? 1.5 : 0.6, 1);
     // HappyGhast.travel flies, in a fluid too
     if (mob.type === "happy_ghast") {
       this.travelHappyGhast(ctx, world);
