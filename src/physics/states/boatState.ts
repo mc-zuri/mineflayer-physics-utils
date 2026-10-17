@@ -28,6 +28,8 @@ export class BoatState extends EntityState {
   box?: AABB;
   lastVerticalVelocity = 0;
   controllingPlayer = false;
+  /** 1.8's EntityBoat.speedMultiplier: how hard its rider's input pushes it, 0.07 to 0.35. */
+  speedMultiplier = 0.07;
 
   worldReady = true;
 
@@ -145,6 +147,7 @@ export class BoatState extends EntityState {
     other.box = this.box?.clone();
     other.lastVerticalVelocity = this.lastVerticalVelocity;
     other.controllingPlayer = this.controllingPlayer;
+    other.speedMultiplier = this.speedMultiplier;
     other.worldReady = this.worldReady;
     other.age = this.age;
     other.isCollidedHorizontally = this.isCollidedHorizontally;

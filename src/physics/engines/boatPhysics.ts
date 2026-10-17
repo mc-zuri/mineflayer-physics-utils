@@ -7,7 +7,7 @@ import { BoatPhysicsSettings, resolveBoatSettings } from "../settings/boatSettin
 import { BoatState, BoatStatus } from "../states/boatState";
 import { IEntityState } from "../states";
 import { EntityPhysics } from "./entityPhysics";
-import { Mth, mthFor } from "../../util/mth";
+import { Mth, fastAtan2, mthFor } from "../../util/mth";
 
 type PhysicsWorld = {
   getBlock(pos: Vec3): Block | null | undefined;
@@ -56,6 +56,122 @@ export class BoatPhysics extends EntityPhysics {
     this.move(simCtx, state, world);
     state.age++;
     return state;
+  }
+
+  /**
+   * 1.8's EntityBoat.onUpdate for a boat the local player rides: its client runs the boat's own physics then
+   * (NetHandlerPlayClient.handleEntityAttach's setIsBoatEmpty(false)), though the server keeps moving it too. Its share
+   * of five slices of its box in water floats it (0.04F up or down by it; all in water, half a fall's speed off and
+   * 0.007F up); its rider's input (the moveForward and moveStrafing its last tick left) pushes it along the rider's
+   * yaw by its speed multiplier * 0.05F; its speed is held to 0.35, and the multiplier grows toward 0.35 by a 35th
+   * while it speeds up, shrinks toward 0.07 otherwise; on the ground its motion halves; it moves (no step), keeps 0.99F
+   * of x and z and 0.95F of y (a fast boat that hits a wall is broken by the server instead) and turns toward where it
+   * went, by at most 20 degrees (MathHelper.atan2's table, when it went more than 0.001 squared).
+   */
+  simulateLegacy(simCtx: EPhysicsCtx, world: PhysicsWorld, rider: { yaw: number; forward: number; strafe: number } | null): BoatState {
+    const state = simCtx.state as BoatState;
+    const f32 = Math.fround;
+    // (its own box: setSize(1.5F, 0.6F) around the position, then moved with it)
+    if (!state.box) {
+      const half = simCtx.getHalfWidth();
+      const height = f32(simCtx.height);
+      state.box = new AABB(state.pos.x - half, state.pos.y, state.pos.z - half, state.pos.x + half, state.pos.y + height, state.pos.z + half);
+    }
+    const box = state.box;
+    const prevX = state.pos.x;
+    const prevZ = state.pos.z;
+    const slices = 5;
+    let inWater = 0;
+    for (let j = 0; j < slices; j++) {
+      const lo = box.minY + ((box.maxY - box.minY) * (j + 0)) / slices - 0.125;
+      const hi = box.minY + ((box.maxY - box.minY) * (j + 1)) / slices - 0.125;
+      if (this.containsLegacyWater(new AABB(box.minX, lo, box.minZ, box.maxX, hi, box.maxZ), world)) inWater += 1.0 / slices;
+    }
+    const vel = state.vel;
+    const speedBefore = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+    if (inWater < 1.0) {
+      vel.y += f32(0.04) * (inWater * 2.0 - 1.0);
+    } else {
+      if (vel.y < 0.0) vel.y /= 2.0;
+      vel.y += f32(0.007);
+    }
+    if (rider) {
+      // (float rider.rotationYaw + -moveStrafing * 90.0F, in radians as s * (float) Math.PI / 180.0F)
+      const yaw = f32(f32(rider.yaw) + f32(-f32(rider.strafe) * 90));
+      const radians = f32(f32(yaw * f32(Math.PI)) / 180);
+      vel.x = vel.x + -Math.sin(radians) * state.speedMultiplier * f32(rider.forward) * f32(0.05);
+      vel.z = vel.z + Math.cos(radians) * state.speedMultiplier * f32(rider.forward) * f32(0.05);
+    }
+    let speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+    if (speed > 0.35) {
+      const scale = 0.35 / speed;
+      vel.x *= scale;
+      vel.z *= scale;
+      speed = 0.35;
+    }
+    if (speed > speedBefore && state.speedMultiplier < 0.35) {
+      state.speedMultiplier += (0.35 - state.speedMultiplier) / 35.0;
+      if (state.speedMultiplier > 0.35) state.speedMultiplier = 0.35;
+    } else {
+      state.speedMultiplier -= (state.speedMultiplier - 0.07) / 35.0;
+      if (state.speedMultiplier < 0.07) state.speedMultiplier = 0.07;
+    }
+    if (state.onGround) {
+      vel.x *= 0.5;
+      vel.y *= 0.5;
+      vel.z *= 0.5;
+    }
+    this.move(simCtx, state, world);
+    if (!state.isCollidedHorizontally || !(speedBefore > 0.2975)) {
+      vel.x *= f32(0.99);
+      vel.y *= f32(0.95);
+      vel.z *= f32(0.99);
+    }
+    state.pitch = 0;
+    const held = state.yawDegrees;
+    let heading = held;
+    const dx = prevX - state.pos.x;
+    const dz = prevZ - state.pos.z;
+    if (dx * dx + dz * dz > 0.001) heading = f32((fastAtan2(dz, dx) * 180.0) / Math.PI);
+    let turn = BoatPhysics.wrapDegrees(heading - held);
+    if (turn > 20.0) turn = 20.0;
+    if (turn < -20.0) turn = -20.0;
+    // (Entity.setRotation: yaw % 360.0F)
+    state.setYawDegrees(f32(f32(held + turn) % 360));
+    state.age++;
+    return state;
+  }
+
+  /** MathHelper.wrapDegrees of a double. */
+  private static wrapDegrees(degrees: number): number {
+    degrees %= 360.0;
+    if (degrees >= 180.0) degrees -= 360.0;
+    if (degrees < -180.0) degrees += 360.0;
+    return degrees;
+  }
+
+  /**
+   * 1.8's World.isMaterialInBB for water: a water block among those from floor(min) to floor(max + 1) whose surface
+   * (its y + 1, less level / 8 under 8) is at or above the box's bottom.
+   */
+  private containsLegacyWater(bb: AABB, world: PhysicsWorld): boolean {
+    const cursor = new Vec3(0, 0, 0);
+    const maxX = Math.floor(bb.maxX + 1.0);
+    const maxY = Math.floor(bb.maxY + 1.0);
+    const maxZ = Math.floor(bb.maxZ + 1.0);
+    for (cursor.x = Math.floor(bb.minX); cursor.x < maxX; cursor.x++) {
+      for (cursor.y = Math.floor(bb.minY); cursor.y < maxY; cursor.y++) {
+        for (cursor.z = Math.floor(bb.minZ); cursor.z < maxZ; cursor.z++) {
+          const block = world.getBlock(cursor);
+          // (Material.water: still and flowing water, their level in the metadata)
+          if (!block || (block.name !== "water" && block.name !== "flowing_water")) continue;
+          const level = Number(block.metadata ?? 0);
+          const surface = level < 8 ? cursor.y + 1 - level / 8.0 : cursor.y + 1;
+          if (surface >= bb.minY) return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**

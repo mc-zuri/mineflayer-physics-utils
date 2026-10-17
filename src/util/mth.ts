@@ -72,3 +72,65 @@ export function mthFor(doubleArgument: boolean): Mth {
 export function floatRadians(degrees: number): number {
   return f32(f32(degrees) * f32(0.017453292));
 }
+
+// MathHelper.atan2 (1.8.8 - 1.12.2's table-driven arc tangent, func_181159_b): Double.doubleToRawLongBits and back
+const bits = new Float64Array(1);
+const longBits = new BigInt64Array(bits.buffer);
+const rawLongBits = (value: number): bigint => {
+  bits[0] = value;
+  return longBits[0];
+};
+const fromLongBits = (value: bigint): number => {
+  longBits[0] = BigInt.asIntN(64, value);
+  return bits[0];
+};
+const FRAC_BIAS = fromLongBits(BigInt("4805340802404319232"));
+let asinTable: Float64Array | undefined;
+let cosTable: Float64Array | undefined;
+
+/** MathHelper.fastInverseSqrt: one Newton step from the bit trick. */
+export function fastInverseSqrt(x: number): number {
+  const half = 0.5 * x;
+  const y = fromLongBits(BigInt("6910469410427058090") - (rawLongBits(x) >> BigInt(1)));
+  return y * (1.5 - half * y * y);
+}
+
+/** MathHelper.atan2 (1.8.8 - 1.12.2): the arc tangent from a 257-entry arcsine table and a cubic correction. */
+export function fastAtan2(y: number, x: number): number {
+  const sq = x * x + y * y;
+  if (Number.isNaN(sq)) return NaN;
+  if (!asinTable || !cosTable) {
+    asinTable = new Float64Array(257);
+    cosTable = new Float64Array(257);
+    for (let i = 0; i < 257; i++) {
+      const asin = Math.asin(i / 256.0);
+      cosTable[i] = Math.cos(asin);
+      asinTable[i] = asin;
+    }
+  }
+  const negY = y < 0.0;
+  if (negY) y = -y;
+  const negX = x < 0.0;
+  if (negX) x = -x;
+  const swap = y > x;
+  if (swap) {
+    const t = x;
+    x = y;
+    y = t;
+  }
+  const inv = fastInverseSqrt(sq);
+  x *= inv;
+  y *= inv;
+  const biased = FRAC_BIAS + y;
+  const index = Number(BigInt.asIntN(32, rawLongBits(biased)));
+  const asin = asinTable[index];
+  const cos = cosTable[index];
+  const delta = biased - FRAC_BIAS;
+  const sinDelta = y * cos - x * delta;
+  const correction = (6.0 + sinDelta * sinDelta) * sinDelta * 0.16666666666666666;
+  let angle = asin + correction;
+  if (swap) angle = Math.PI / 2 - angle;
+  if (negX) angle = Math.PI - angle;
+  if (negY) angle = -angle;
+  return angle;
+}
