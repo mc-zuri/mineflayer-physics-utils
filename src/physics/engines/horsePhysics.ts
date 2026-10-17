@@ -325,7 +325,7 @@ export class HorsePhysics extends EntityPhysics {
       for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
         for (cursor.x = Math.floor(bb.minX); cursor.x <= Math.floor(bb.maxX); cursor.x++) {
           const block = world.getBlock(cursor);
-          if (!block || block.type !== this.lavaId) continue;
+          if (!block || !this.isLava(block.type)) continue;
 
           const blockFluidHeight = this.getLavaFluidHeightInBlock(block, world, cursor);
           if (blockFluidHeight <= 0) continue;
@@ -349,7 +349,7 @@ export class HorsePhysics extends EntityPhysics {
 
   private getLavaFluidHeightInBlock(block: Block, world: PhysicsWorld, pos: Vec3): number {
     const above = world.getBlock(pos.offset(0, 1, 0));
-    if (above && above.type === this.lavaId) {
+    if (above && this.isLava(above.type)) {
       return 1;
     }
     return 1 - this.getLavaLiquidHeightFraction(block);

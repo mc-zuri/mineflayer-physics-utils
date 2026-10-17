@@ -39,6 +39,9 @@ export class EntityPhysics implements IPhysics {
   protected webId: number;
   protected waterId: number;
   protected lavaId: number;
+  /** Before 1.13 the flowing water and lava are blocks of their own (BlockDynamicLiquid), of the same material. */
+  protected flowingWaterId: number;
+  protected flowingLavaId: number;
   protected ladderId: number;
   protected vineId: number;
   protected bubblecolumnId: number;
@@ -70,6 +73,8 @@ export class EntityPhysics implements IPhysics {
     this.webId = blocksByName.cobweb ? blocksByName.cobweb.id : blocksByName.web.id;
     this.waterId = blocksByName.water.id;
     this.lavaId = blocksByName.lava.id;
+    this.flowingWaterId = blocksByName.flowing_water?.id ?? -1; // before 1.13
+    this.flowingLavaId = blocksByName.flowing_lava?.id ?? -1; // before 1.13
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
     this.waterLike = new Set();
@@ -453,7 +458,8 @@ export class EntityPhysics implements IPhysics {
       for (cursor.z = Math.floor(queryBB.minZ); cursor.z <= Math.floor(queryBB.maxZ); cursor.z++) {
         for (cursor.x = Math.floor(queryBB.minX); cursor.x <= Math.floor(queryBB.maxX); cursor.x++) {
           const block = world.getBlock(cursor);
-          if (block && block.type === type) return true;
+          // (before 1.13 the material: still or flowing water, still or flowing lava)
+          if (block && (block.type === type || block.type === this.flowingOf(type))) return true;
         }
       }
     }
@@ -467,7 +473,7 @@ export class EntityPhysics implements IPhysics {
       for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
         for (cursor.x = Math.floor(bb.minX); cursor.x <= Math.floor(bb.maxX); cursor.x++) {
           const block = world.getBlock(cursor);
-          if (block && (block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
+          if (block && (this.isWater(block.type) || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
             const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
             if (Math.ceil(bb.maxY) >= waterLevel) waterBlocks.push(block);
           }
@@ -475,6 +481,23 @@ export class EntityPhysics implements IPhysics {
       }
     }
     return waterBlocks;
+  }
+
+  /** Still water, or before 1.13 flowing water (Material.WATER). */
+  protected isWater(type: number): boolean {
+    return type === this.waterId || type === this.flowingWaterId;
+  }
+
+  /** Still lava, or before 1.13 flowing lava (Material.LAVA). */
+  protected isLava(type: number): boolean {
+    return type === this.lavaId || type === this.flowingLavaId;
+  }
+
+  /** The flowing block of a still fluid before 1.13 (none for any other block). */
+  private flowingOf(type: number): number {
+    if (type === this.waterId) return this.flowingWaterId;
+    if (type === this.lavaId) return this.flowingLavaId;
+    return -2;
   }
 
   getLiquidHeightPcent(block: Block) {
@@ -485,7 +508,8 @@ export class EntityPhysics implements IPhysics {
     if (!block) return -1;
     if (this.waterLike.has(block.type)) return 0;
     if (block.getProperties().waterlogged) return 0;
-    if (block.type !== this.waterId) return -1;
+    // (BlockLiquid.getEffectiveFlowDecay before 1.13: any block of water's material, flowing or still)
+    if (!this.isWater(block.type)) return -1;
     const meta = block.metadata;
     return meta >= 8 ? 0 : meta;
   }

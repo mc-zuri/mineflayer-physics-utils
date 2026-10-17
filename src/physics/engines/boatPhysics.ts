@@ -491,13 +491,13 @@ export class BoatPhysics extends EntityPhysics {
 
   private isWaterBlock(block: Block | null | undefined): block is Block {
     if (!block) return false;
-    return block.type === this.waterId || this.waterLike.has(block.type) || !!block.getProperties().waterlogged;
+    return this.isWater(block.type) || this.waterLike.has(block.type) || !!block.getProperties().waterlogged;
   }
 
   private isSameFluid(block: Block, other: Block | null | undefined): boolean {
     if (!other) return false;
-    if (block.type === this.waterId) {
-      return other.type === this.waterId || !!other.getProperties().waterlogged || this.waterLike.has(other.type);
+    if (this.isWater(block.type)) {
+      return this.isWater(other.type) || !!other.getProperties().waterlogged || this.waterLike.has(other.type);
     }
     if (block.getProperties().waterlogged) {
       return this.isWaterBlock(other);
@@ -511,8 +511,9 @@ export class BoatPhysics extends EntityPhysics {
   private isSourceWater(block: Block): boolean {
     if (block.getProperties().waterlogged) return true;
     if (this.waterLike.has(block.type)) return true;
-    if (block.type !== this.waterId) return false;
-    return Number(block.getProperties().level) === 0;
+    // (before 1.13 the level of any water, still or flowing: EntityBoat.getUnderwaterStatus's BlockLiquid.LEVEL)
+    if (!this.isWater(block.type)) return false;
+    return Number(block.getProperties().level ?? block.metadata) === 0;
   }
 
   /**
