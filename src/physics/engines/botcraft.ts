@@ -661,16 +661,16 @@ export class BotcraftPhysics implements IPhysics {
         push.scale(worldInUltraWarm ? 0.007 : 0.0023333333333333335);
       }
     }
-    const pushNorm = push.norm();
-    // the minimum push for a player at rest came with 1.16
+    // the minimum push for a player at rest came with 1.16 (Vec3.length and normalize: a float square root in 1.16)
     if (
       !this.verLessThan("1.16") &&
       Math.abs(player.vel.x) < ctx.worldSettings.negligeableVelocity &&
       Math.abs(player.vel.z) < ctx.worldSettings.negligeableVelocity &&
-      pushNorm < 0.0045000000000000005
+      this.vecLength(push) < 0.0045000000000000005
     ) {
       // normalize and scale
-      push.normalize().scale(0.0045000000000000005);
+      const unit = this.normalizeVec(push);
+      push.set(unit.x, unit.y, unit.z).scale(0.0045000000000000005);
     }
     // Entity.updateFluidHeightAndDoFluidPushing adds the current only when there is one (a -0 motion stays), to an
     // entity the fluid pushes (isPushedByFluid)
@@ -812,10 +812,15 @@ export class BotcraftPhysics implements IPhysics {
     return this.normalizeVec(flow);
   }
 
+  /** Vec3.length: a float square root before 1.17 (Mth.sqrt). */
+  private vecLength(v: Vec3) {
+    const sum = v.x * v.x + v.y * v.y + v.z * v.z;
+    return this.verLessThan("1.17") ? Math.fround(Math.sqrt(sum)) : Math.sqrt(sum);
+  }
+
   /** Vec3.normalize: a float square root before 1.17; zero below 1e-4, below 1e-5F from 1.21.2. */
   private normalizeVec(v: Vec3) {
-    const sum = v.x * v.x + v.y * v.y + v.z * v.z;
-    const length = this.verLessThan("1.17") ? Math.fround(Math.sqrt(sum)) : Math.sqrt(sum);
+    const length = this.vecLength(v);
     if (length < (this.verLessThan("1.21.2") ? 1e-4 : 9.999999747378752e-6)) return new Vec3(0, 0, 0);
     return new Vec3(v.x / length, v.y / length, v.z / length);
   }
@@ -2215,14 +2220,17 @@ export class BotcraftPhysics implements IPhysics {
   /**
    * A moving piston block pushing the player, as PistonMovingBlockEntity.tick's moveCollidedEntities does (1.11+): the
    * client ticks its block entities after its entities, so the caller runs this after simulate, once per moving piston,
-   * with its progress before the tick (then advances it by 0.5F). The moved block's collision boxes, placed at the
-   * progress and swept by the 0.5 the block moves, push the player out of their way plus 0.01, along the direction
-   * the block moves, by Entity.move(PISTON).
+   * with its progress before the tick (then advances it by 0.5F), the tick it reaches 1 too (it then turns into the
+   * block it moved; from 1.11 without a push). The moved block's collision boxes, placed at the progress and swept by
+   * the 0.5 the block moves, push the player out of their way plus 0.01, along the direction the block moves, by
+   * Entity.move(PISTON). Before 1.11 see pushByLegacyPiston.
    */
   public pushByMovingPiston(ctx: EPhysicsCtx, world: World, piston: MovingPiston): void {
-    if (this.verLessThan("1.11") || !(ctx.state instanceof PlayerState)) return;
+    if (!(ctx.state instanceof PlayerState)) return;
     const player = ctx.state;
     if (player.gameMode === "spectator") return;
+    if (this.verLessThan("1.11")) return this.pushByLegacyPiston(ctx, world, piston);
+    if (piston.progress >= 1) return;
     const f32 = Math.fround;
     const progress = f32(piston.progress);
     const distance = f32(f32(progress + f32(0.5)) - progress);
@@ -2263,6 +2271,69 @@ export class BotcraftPhysics implements IPhysics {
         }
       }
     }
+  }
+
+  /**
+   * TileEntityPiston.update before 1.11: the progress goes 0.5F further (to at most 1), or at 1 the block entity ends,
+   * pushing once more. The player, when its box meets the moved block's, is moved by Entity.move (its own move: step,
+   * sneaking edge, collisions). The moved block's box is its single collision box (getCollisionBoundingBox): a head's
+   * plate (1.9 - 1.10), on 1.8 the bounds BlockPistonExtension.addCollisionBoxesToList leaves it with, a full cube; a
+   * retracting piston's unextended base, a full cube.
+   *   1.8 (updatePushedObjects): only an extending block pushes while it moves, by the progress gone plus 0.0625F, along
+   *   the piston's facing; the end pushes by 0.25F along it. The box (BlockPistonMoving.getBoundingBox) is the block's
+   *   with the side the facing points to drawn in by what is left to go (1 - progress; progress - 1 retracting).
+   *   1.9 - 1.10 (moveCollidedEntities): the block's box at the progress before and after, joined; the player goes out
+   *   of it plus 0.01 along the way the block moves.
+   */
+  private pushByLegacyPiston(ctx: EPhysicsCtx, world: World, piston: MovingPiston): void {
+    const player = ctx.state as PlayerState;
+    const f32 = Math.fround;
+    const [fx, fy, fz] = piston.direction;
+    const [px, py, pz] = piston.pos;
+    const before = f32(piston.progress);
+    const ended = before >= 1;
+    const after = ended ? before : Math.min(f32(before + f32(0.5)), 1);
+    const box = this.boundingBoxForMove(player).bb;
+    const meets = (b: AABB) => b.intersects(box);
+    if (this.verLessThan("1.9")) {
+      if (!ended && !piston.extending) return;
+      const progress = ended ? 1 : after;
+      const distance = ended ? f32(0.25) : f32(f32(after - before) + f32(0.0625));
+      const left = piston.extending ? f32(1 - progress) : f32(progress - 1);
+      const b = new AABB(px, py, pz, px + 1, py + 1, pz + 1);
+      if (fx < 0) b.minX -= fx * left; else b.maxX -= fx * left;
+      if (fy < 0) b.minY -= fy * left; else b.maxY -= fy * left;
+      if (fz < 0) b.minZ -= fz * left; else b.maxZ -= fz * left;
+      if (!meets(b)) return;
+      this.applyMovement(ctx, world, new Vec3(distance * fx, distance * fy, distance * fz));
+      return;
+    }
+    // (PistonHeadBlock.getBoundingBox: the plate on the facing's side)
+    const plate = (axis: number, sign: number) => {
+      const min = [0, 0, 0];
+      const max = [1, 1, 1];
+      if (sign > 0) min[axis] = 0.75;
+      else max[axis] = 0.25;
+      return [...min, ...max];
+    };
+    const axis = fx !== 0 ? 0 : fy !== 0 ? 1 : 2;
+    const sign = fx + fy + fz;
+    const shape = piston.extending ? plate(axis, sign) : [0, 0, 0, 1, 1, 1];
+    const at = (progress: number) => {
+      const o = piston.extending ? f32(progress - 1) : f32(1 - progress);
+      return new AABB(px + shape[0] + o * fx, py + shape[1] + o * fy, pz + shape[2] + o * fz, px + shape[3] + o * fx, py + shape[4] + o * fy, pz + shape[5] + o * fz);
+    };
+    const a = at(after);
+    const b = at(before);
+    const area = new AABB(Math.min(a.minX, b.minX), Math.min(a.minY, b.minY), Math.min(a.minZ, b.minZ), Math.max(a.maxX, b.maxX), Math.max(a.maxY, b.maxY), Math.max(a.maxZ, b.maxZ));
+    if (!meets(area)) return;
+    const way = piston.extending ? sign : -sign;
+    const min = [area.minX, area.minY, area.minZ][axis];
+    const max = [area.maxX, area.maxY, area.maxZ][axis];
+    const amount = (way > 0 ? max - [box.minX, box.minY, box.minZ][axis] : [box.maxX, box.maxY, box.maxZ][axis] - min) + 0.01;
+    const move = [0, 0, 0];
+    move[axis] = amount * way;
+    this.applyMovement(ctx, world, new Vec3(move[0], move[1], move[2]));
   }
 
   /**

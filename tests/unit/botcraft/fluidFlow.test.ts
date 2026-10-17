@@ -68,3 +68,42 @@ describe("Botcraft fluid flow", () => {
     });
   }
 });
+
+// From 1.16 a player almost at rest takes at least 0.0045 of the current (updateFluidHeightAndDoFluidPushing:
+// normalize().scale(0.0045) under a length of 0.0045), Vec3.length and normalize with a float square root in 1.16.
+// Recorded as b_flow_walk_against, tick 1: standing in a channel whose water flows west (levels 5 - 7, x 6 - 11), the
+// player walks east (yaw 90) against it, from rest.
+const atRest = [
+  { version: "1.16.5", x: 9.484900000043721, velX: -0.012080000145029754 },
+  { version: "1.17.1", x: 9.484900000056625, velX: -0.01208000013470649 },
+];
+
+describe("Botcraft fluid flow at rest", () => {
+  for (const { version, x, velX } of atRest) {
+    it(`pushes a player at rest by at least 0.0045 (${version}, b_flow_walk_against)`, () => {
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(9.5, 101, 1881.5), groundLevel: 101 });
+      const world = createFlatWorld(version, 101);
+      const { stone, water } = rig.mcData.blocksByName;
+      for (let bx = -6; bx <= 12; bx++) {
+        for (let y = 101; y <= 102; y++) {
+          world.setOverrideBlock(new Vec3(bx, y, 1878), stone.id);
+          world.setOverrideBlock(new Vec3(bx, y, 1884), stone.id);
+        }
+      }
+      for (let z = 1879; z <= 1883; z++) for (let y = 101; y <= 102; y++) world.setOverrideBlock(new Vec3(12, y, z), stone.id);
+      for (let bx = 6; bx <= 11; bx++) {
+        for (let z = 1880; z <= 1882; z++) world.setOverrideBlock(new Vec3(bx, 101, z), water.id, 5 + Math.floor((bx - 6) / 2));
+      }
+      const state = rig.playerState;
+      state.vel.set(0, 0, 0);
+      state.onGround = true;
+      state.yawDegrees = 90;
+      state.control.forward = true;
+
+      rig.physics.simulate(rig.playerCtx, world as any);
+
+      expect(state.pos.x).toBe(x);
+      expect(state.vel.x).toBe(velX);
+    });
+  }
+});
