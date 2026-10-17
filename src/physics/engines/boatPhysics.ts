@@ -178,8 +178,9 @@ export class BoatPhysics extends EntityPhysics {
    * Entity.move for the boat (no step): the motion collided with the blocks, y first, then x and z (from 1.14 the
    * larger of the two first; from 1.13 an axis under 1.0E-7 that meets a block stays); 1.14 - 1.21.1 move only by
    * more than 1.0E-7 squared, 1.21.2+ also when nothing blocked the motion. Before 1.17 the position is the moved
-   * box's (centre x / z, bottom y). A blocked horizontal axis stops (1.14+ beyond Mth.equal's 1.0E-5F), and a
-   * blocked vertical motion lands.
+   * box's (centre x / z, bottom y). It collides horizontally beyond Mth.equal's 1.0E-5F from 1.14; an axis whose move
+   * changed at all stops before 1.18 (a motion under 1.0E-7 too), one it collides on from 1.18. A blocked vertical
+   * motion lands.
    */
   private move(simCtx: EPhysicsCtx, state: BoatState, world: PhysicsWorld): void {
     const legacy = this.data.version["<"]("1.14");
@@ -233,9 +234,12 @@ export class BoatPhysics extends EntityPhysics {
     }
 
     const differs = (a: number, b: number) => (legacy ? a !== b : Math.abs(b - a) >= Math.fround(1.0e-5));
-    const blockedX = differs(want.x, moved.x);
-    const blockedZ = differs(want.z, moved.z);
-    state.isCollidedHorizontally = blockedX || blockedZ;
+    state.isCollidedHorizontally = differs(want.x, moved.x) || differs(want.z, moved.z);
+    // (before 1.18 the motion of an axis stops when the move along it changed at all, a move under 1.0E-7 dropped
+    // too; from 1.18 when it is a horizontal collision, beyond Mth.equal's 1.0E-5F)
+    const stops = (a: number, b: number) => (this.data.version["<"]("1.18") ? a !== b : differs(a, b));
+    const blockedX = stops(want.x, moved.x);
+    const blockedZ = stops(want.z, moved.z);
     state.isCollidedVertically = want.y !== moved.y;
     state.onGround = state.isCollidedVertically && want.y < 0;
     if (!this.data.version["<"]("26.2")) {
