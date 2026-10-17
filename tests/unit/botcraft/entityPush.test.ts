@@ -114,4 +114,40 @@ describe("Botcraft boat push", () => {
     expect(rig.playerState.pos.y).toBe(99.99486530870348);
     expect(rig.playerState.vel.x).toBe(0.00889146170192836);
   });
+
+  // Entity.push moves both: the camel the server put the mounting player inside (m_c_mount_click_camel on 1.21.1, tick
+  // 42: the player at x 2.0, the camel at 2.5) goes the other way, 0.05F * the square root of 0.5 east, which the client
+  // keeps in the camel's motion (pushedEntities). A mob that carries passengers is not moved, nor does the vehicle the
+  // player rides push it (Entity.isPassengerOfSameVehicle).
+  describe("the push back", () => {
+    const camel = (extra: object) => ({
+      name: "camel",
+      id: 108,
+      living: true,
+      position: new Vec3(2.5, 101, 3143.5),
+      boundingBox: new AABB(1.649999976158142, 101, 3142.649999976158, 3.350000023841858, 103.375, 3144.350000023842),
+      ...extra,
+    });
+    const pushed = (extra: object) => {
+      const version = "1.21.1";
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(2, 102.4, 3143.5) });
+      rig.playerState.vel.set(0, 0, 0);
+      rig.playerState.nearbyEntities = [camel(extra)] as any;
+      rig.physics.simulate(rig.playerCtx, createFlatWorld(version, 0) as any);
+      return rig.playerState;
+    };
+
+    it("goes to the mob that pushed the player (1.21.1, m_c_mount_click_camel tick 42)", () => {
+      const player = pushed({});
+      expect(player.pushedEntities).toEqual([{ id: 108, x: 0.03535533958616298, z: 0 }]);
+    });
+
+    it("does not move a mob carrying passengers, and the player's own vehicle does not push", () => {
+      expect(pushed({ isVehicle: true }).pushedEntities).toEqual([]);
+      const riding = pushed({ sameVehicle: true });
+      expect(riding.pushedEntities).toEqual([]);
+      expect(riding.vel.x).toBe(0);
+    });
+  });
 });
+

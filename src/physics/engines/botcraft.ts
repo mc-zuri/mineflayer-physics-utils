@@ -454,10 +454,11 @@ export class BotcraftPhysics implements IPhysics {
    * before they push).
    */
   private pushByNearbyEntities(player: PlayerState, beforePlayer: boolean) {
+    if (beforePlayer) player.pushedEntities = [];
     if (this.verLessThan("1.9") || player.gameMode === "spectator" || player.onClimbable) return;
     const box = player.getBB();
     for (const other of player.nearbyEntities) {
-      if (!!other.ticksBeforePlayer !== beforePlayer) continue;
+      if (!!other.ticksBeforePlayer !== beforePlayer || other.sameVehicle) continue;
       const { position, boundingBox } = other.afterTick ?? other;
       const { minX, minY, minZ, maxX, maxY, maxZ } = boundingBox;
       if (isBoatName(other.name)) {
@@ -466,16 +467,21 @@ export class BotcraftPhysics implements IPhysics {
       } else if (!other.living || !box.intersects(boundingBox)) {
         continue;
       }
-      this.pushAwayFrom(player, position);
+      const push = this.pushAwayFrom(player, position);
+      // (the other goes the other way: Entity.push's other.push, unless it carries passengers)
+      if (push && other.id != null && !other.isVehicle) player.pushedEntities.push({ id: other.id, x: push.x, z: push.z });
     }
   }
 
-  /** Entity.push: 0.05 away from the other's centre, the square root of the larger axis distance in float before 1.17. */
-  private pushAwayFrom(player: PlayerState, other: Vec3) {
+  /**
+   * Entity.push: 0.05 away from the other's centre, the square root of the larger axis distance in float before 1.17.
+   * Returns the push the other takes (the player's, reversed), or null when they are too close to push.
+   */
+  private pushAwayFrom(player: PlayerState, other: Vec3): { x: number; z: number } | null {
     let dx = other.x - player.pos.x;
     let dz = other.z - player.pos.z;
     let distance = Math.max(Math.abs(dx), Math.abs(dz));
-    if (distance < 0.009999999776482582) return;
+    if (distance < 0.009999999776482582) return null;
     distance = this.verLessThan("1.17") ? Math.fround(Math.sqrt(distance)) : Math.sqrt(distance);
     dx /= distance;
     dz /= distance;
@@ -484,6 +490,7 @@ export class BotcraftPhysics implements IPhysics {
     dz = dz * scale * 0.05000000074505806;
     player.vel.x += -dx;
     player.vel.z += -dz;
+    return { x: dx, z: dz };
   }
 
   /**

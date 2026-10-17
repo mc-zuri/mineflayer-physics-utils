@@ -86,6 +86,9 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
         out.push([slotOf(other.id), {
             ...(name === "happy_ghast" && { baby: flag("baby"), staysStill: flag("stays_still") }),
             name,
+            id: other.id,
+            isVehicle: (other.passengers?.length ?? 0) > 0,
+            sameVehicle: self.vehicle != null && (other === self.vehicle || other.vehicle === self.vehicle),
             living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
             position: shown.clone(),
             boundingBox: boxAt(shown),
@@ -207,6 +210,12 @@ export class PlayerState implements IEntityState {
     public stuckSpeedMultiplier: Vec3 = new Vec3(0, 0, 0);
     /** The other entities near the player (input only): the boats and shulkers it collides with, the mobs that push it. */
     public nearbyEntities: NearbyEntity[] = [];
+    /**
+     * The pushes the player gave back this tick (Entity.push moves both: the one that pushes the local player is moved
+     * away from it on the client too, unless it carries passengers), by the pusher's id: what the client adds to that
+     * entity's motion.
+     */
+    public pushedEntities: { id: number; x: number; z: number }[] = [];
     /** How far pistons moved the player on each axis this tick (Entity.pistonDeltas) and the tick (age) it was. */
     public pistonDeltas: number[] = [0, 0, 0];
     public pistonDeltasTick = -1;
