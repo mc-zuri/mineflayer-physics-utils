@@ -2605,11 +2605,13 @@ export class BotcraftPhysics implements IPhysics {
     }
 
     // Entity.checkFallDamage: falling adds to the fall distance (a float until 1.21.5, then no longer in water and
-    // counting the landing move too); landing ends it
-    if (this.verLessThan("1.21.5")) {
+    // counting the landing move too); landing ends it. 1.21.4's Entity.move leaves it to the server for an entity the
+    // client controls (isControlledByClient: the player, and what it rides): the fall distance stays as it is
+    const clientChecksFall = this.data.version.minecraftVersion !== "1.21.4";
+    if (clientChecksFall && this.verLessThan("1.21.5")) {
       if (player.onGround) player.fallDistance = 0;
       else if (movement.y < 0) player.fallDistance = Math.fround(player.fallDistance - Math.fround(movement.y));
-    } else {
+    } else if (clientChecksFall) {
       if (!player.isInWater && movement.y < 0) player.fallDistance -= Math.fround(movement.y);
       if (player.onGround) player.fallDistance = 0;
     }
