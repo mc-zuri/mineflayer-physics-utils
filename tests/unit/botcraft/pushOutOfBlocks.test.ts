@@ -5,10 +5,10 @@ import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/bot
 
 // The recorder's "g_pushout_*": a stone column at x 0, z 2787 (y 101 - 103) on a stone floor, the player standing with
 // a corner of its box inside it. The first tick pushes it 0.1 toward the nearest open side.
-function standIn(version: string, x: number, z: number) {
+function standIn(version: string, x: number, z: number, column = "stone") {
   const world = createFlatWorld(version, 101);
   const rig = createBotcraftPlayerRig({ version, position: new Vec3(x, 101, z) });
-  for (let y = 101; y <= 103; y++) world.setOverrideBlock(new Vec3(0, y, 2787), rig.mcData.blocksByName.stone.id);
+  for (let y = 101; y <= 103; y++) world.setOverrideBlock(new Vec3(0, y, 2787), rig.mcData.blocksByName[column].id);
   rig.playerState.vel.set(0, 0, 0);
   rig.playerState.onGround = true;
 
@@ -30,6 +30,20 @@ describe("Botcraft push out of blocks", () => {
       const player = standIn(version, 1.2, 2788.2);
       expect(player.pos.x).toBe(1.300000001490116);
       expect(player.vel.x).toBe(0.0546000071555377);
+    });
+  }
+
+  // Before 1.13 a block pushes out by the client's own normal cube test (1.8 Block.isFullCube, 1.9+ isNormalCube), not
+  // by its collision boxes: soul sand (7/8 high) and pumpkins do, 1.8's farmland (a whole block to collide with) does not.
+  for (const [version, column, pushes] of [
+    ["1.12.2", "soul_sand", true],
+    ["1.8.8", "soul_sand", true],
+    ["1.12.2", "pumpkin", true],
+    ["1.8.8", "farmland", false],
+  ] as const) {
+    it(`${pushes ? "pushes" : "does not push"} out of a column of ${column} (${version})`, () => {
+      const player = standIn(version, -0.2, 2787.5, column);
+      expect(player.vel.x < 0).toBe(pushes);
     });
   }
 

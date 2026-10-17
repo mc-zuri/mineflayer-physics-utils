@@ -10,6 +10,15 @@ interface Family {
   blocks: number[];
   connect: { all?: Ranges; north?: Ranges; south?: Ranges; west?: Ranges; east?: Ranges };
   boxes: LegacyBox[][];
+  /** 1.11+: BlockState.getCollisionBoundingBox's one box of each way to join (LocalPlayer.updateAutoJump's) */
+  single?: LegacyBox[];
+}
+interface VersionData {
+  families: Family[];
+  /** the block states (id << 4 | data value) the client's pushOutOfBlocks takes for normal cubes */
+  normalCube: Ranges;
+  /** 1.11+: the block states (id << 4 | data value) whose one box is not the bounds of their collision boxes */
+  single?: Record<string, LegacyBox | null>;
 }
 
 const SIDES = [
@@ -42,7 +51,9 @@ const DOOR_FACING: Dir[] = ["east", "south", "west", "north"];
  * in legacyConnections.json as the neighbour block states that join, with the boxes of each of the 16 ways to join.
  */
 export class LegacyShapes {
-  private readonly families = new Map<number, { joins: Record<Dir, Set<number>>; boxes: LegacyBox[][] }>();
+  private readonly families = new Map<number, { joins: Record<Dir, Set<number>>; boxes: LegacyBox[][]; single?: LegacyBox[] }>();
+  private readonly single: Record<string, LegacyBox | null> | null = null;
+  private readonly normalCubes = new Set<number>();
   private readonly stairs = new Set<number>();
   private readonly doors = new Set<number>();
   private readonly chests = new Set<number>();
@@ -55,10 +66,12 @@ export class LegacyShapes {
   constructor(mcData: any) {
     const major: string = mcData.version.majorVersion;
     this.major = major;
-    const data = (legacyConnections as unknown as Record<string, Family[]>)[major];
+    const data = (legacyConnections as unknown as Record<string, VersionData>)[major];
     this.enabled = data != null;
     if (!this.enabled) return;
-    for (const family of data) {
+    this.single = data.single ?? null;
+    for (const [from, to] of data.normalCube) for (let raw = from; raw <= to; raw++) this.normalCubes.add(raw);
+    for (const family of data.families) {
       const expand = (ranges: Ranges) => {
         const set = new Set<number>();
         for (const [from, to] of ranges) for (let raw = from; raw <= to; raw++) set.add(raw);
@@ -67,7 +80,7 @@ export class LegacyShapes {
       const all = family.connect.all ? expand(family.connect.all) : null;
       const joins = {} as Record<Dir, Set<number>>;
       for (const [side] of SIDES) joins[side] = all ?? expand(family.connect[side]!);
-      for (const id of family.blocks) this.families.set(id, { joins, boxes: family.boxes });
+      for (const id of family.blocks) this.families.set(id, { joins, boxes: family.boxes, single: family.single });
     }
     for (const block of mcData.blocksArray) {
       if (/_stairs$/.test(block.name)) this.stairs.add(block.id);
@@ -86,19 +99,57 @@ export class LegacyShapes {
   shapes(type: number, metadata: number, neighbour: LegacyNeighbour): LegacyBox[] | null {
     if (!this.enabled) return null;
     const family = this.families.get(type);
-    if (family) {
-      let mask = 0;
-      for (const [side, dx, dz, bit] of SIDES) {
-        const n = neighbour(dx, 0, dz);
-        if (n != null && family.joins[side].has((n.type << 4) | n.metadata)) mask |= bit;
-      }
-      return family.boxes[mask];
-    }
+    if (family) return family.boxes[this.joinMask(family.joins, neighbour)];
     if (this.stairs.has(type)) return this.stairsShapes(metadata, neighbour);
     if (this.doors.has(type)) return this.doorShapes(type, metadata, neighbour);
     if (this.chests.has(type)) return this.chestShapes(type, neighbour);
     if (type === this.chorusPlant) return this.chorusShapes(neighbour);
     return null;
+  }
+
+  /**
+   * Whether the block is a normal cube to EntityPlayerSP.pushOutOfBlocks (isOpenBlockSpace): 1.8's Block.isFullCube,
+   * 1.9+'s IBlockState.isNormalCube (an opaque material, a full cube, no power source), the block's own property, not
+   * its collision boxes (soul sand and 1.8's end portal frames are, furnaces and pumpkins are, farmland is not).
+   * Null for a version without the data.
+   */
+  isNormalCube(type: number, metadata: number): boolean | null {
+    if (!this.enabled) return null;
+    return this.normalCubes.has((type << 4) | metadata);
+  }
+
+  /** Whether the version has getCollisionBoundingBox's boxes (1.11 and 1.12: the ones with auto-jump). */
+  get hasCollisionBox(): boolean {
+    return this.single != null;
+  }
+
+  /**
+   * BlockState.getCollisionBoundingBox (1.11, 1.12): the one box LocalPlayer.updateAutoJump asks of a block (null for
+   * none), its actual state's among its neighbours: a fence's or wall's is the outline of its arms, a block high; most
+   * blocks' is the bounds of their collision boxes, `shapes` (minecraft-data's or the neighbours').
+   */
+  collisionBox(type: number, metadata: number, neighbour: LegacyNeighbour, shapes: number[][]): LegacyBox | null {
+    const family = this.families.get(type);
+    if (family?.single) return family.single[this.joinMask(family.joins, neighbour)];
+    const raw = String((type << 4) | metadata);
+    if (this.single != null && raw in this.single) return this.single[raw];
+    const boxes = this.shapes(type, metadata, neighbour) ?? shapes;
+    if (boxes.length === 0) return null;
+    const bounds: LegacyBox = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    for (const box of boxes) {
+      for (let i = 0; i < 3; i++) bounds[i] = Math.min(bounds[i], box[i]);
+      for (let i = 3; i < 6; i++) bounds[i] = Math.max(bounds[i], box[i]);
+    }
+    return bounds;
+  }
+
+  private joinMask(joins: Record<Dir, Set<number>>, neighbour: LegacyNeighbour): number {
+    let mask = 0;
+    for (const [side, dx, dz, bit] of SIDES) {
+      const n = neighbour(dx, 0, dz);
+      if (n != null && joins[side].has((n.type << 4) | n.metadata)) mask |= bit;
+    }
+    return mask;
   }
 
   /**

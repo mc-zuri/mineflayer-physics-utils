@@ -12,12 +12,15 @@ const recorded: Record<string, { before: [number, number]; after: [number, numbe
   "1.21.11": { before: [1.9693214940821298, 0.11692816181141515], after: [2.399600454447249, 0.11758154782898447] },
 };
 
-function walkToStep(version: string, autoJump: boolean) {
+function walkToStep(version: string, autoJump: boolean, onStep?: string) {
   const [posX, velX] = recorded[version].before;
   const rig = createBotcraftPlayerRig({ version, position: new Vec3(posX, groundLevel, 1381.5), groundLevel });
   const world = createFlatWorld(version, groundLevel) as any;
   for (let x = 3; x <= 5; x++) {
-    for (let z = 1380; z <= 1382; z++) world.setOverrideBlock(new Vec3(x, groundLevel, z), rig.mcData.blocksByName.stone.id);
+    for (let z = 1380; z <= 1382; z++) {
+      world.setOverrideBlock(new Vec3(x, groundLevel, z), rig.mcData.blocksByName.stone.id);
+      if (onStep && x === 3) world.setOverrideBlock(new Vec3(x, groundLevel + 1, z), rig.mcData.blocksByName[onStep].id);
+    }
   }
   rig.playerState.vel.set(velX, -0.0784000015258789, 0);
   rig.playerState.yawDegrees = 270;
@@ -47,6 +50,13 @@ describe("Botcraft auto-jump", () => {
       expect(state.vel.x).toBe(recorded[version].after[1]);
       expect(state.pos.y).toBe(101.41999998688698);
       expect(state.vel.y).toBe(0.33319999363422365);
+    });
+
+    // the blocks above the step count by LocalPlayer.updateAutoJump's box of them: before 1.13
+    // BlockState.getCollisionBoundingBox, a brewing stand's its base (1/8 high: a step of 1.125 to jump), from 1.13 the
+    // collision shape's top (its rod, 7/8: too high a step)
+    it(`${version < "1.13" ? "jumps" : "does not jump"} up a step with brewing stands on it (${version})`, () => {
+      expect(walkToStep(version, true, "brewing_stand").pos.y > groundLevel).toBe(version < "1.13");
     });
 
     it(`does not jump with auto-jump off (${version})`, () => {

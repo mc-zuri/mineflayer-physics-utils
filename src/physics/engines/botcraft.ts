@@ -1655,10 +1655,18 @@ export class BotcraftPhysics implements IPhysics {
     const cosPitch = this.mth.cos(floatRadians(Math.fround((-player.pitch * 180) / Math.PI)));
     if (f32(-this.mth.sin(yaw) * cosPitch * dirX + this.mth.cos(yaw) * cosPitch * dirZ) < f32(-0.15)) return;
 
-    const empty = (bx: number, by: number, bz: number) => {
-      const block = world.getBlock(new Vec3(bx, by, bz));
-      return block == null || block.shapes.length === 0;
+    // the block's collision box (before 1.13 BlockState.getCollisionBoundingBox, its actual state's among its
+    // neighbours: a fence's a block high), or null
+    const collisionBox = (pos: Vec3): number[] | null => {
+      const block = world.getBlock(pos);
+      if (block == null) return null;
+      if (this.legacyShapes.hasCollisionBox) {
+        return this.legacyShapes.collisionBox(block.type, block.metadata, (dx, dy, dz) => world.getBlock(pos.offset(dx, dy, dz)), block.shapes);
+      }
+      if (block.shapes.length === 0) return null;
+      return [0, 1, 2, 3, 4, 5].map((i) => (i < 3 ? Math.min : Math.max)(...block.shapes.map((shape) => shape[i])));
     };
+    const empty = (bx: number, by: number, bz: number) => collisionBox(new Vec3(bx, by, bz)) == null;
     const headX = Math.floor(x);
     let headY = Math.floor(player.getBB().maxY);
     const headZ = Math.floor(z);
@@ -1691,9 +1699,9 @@ export class BotcraftPhysics implements IPhysics {
       const cy = Math.floor((box.minY + box.maxY) / 2);
       const cz = Math.floor((box.minZ + box.maxZ) / 2);
       for (let step = 1; step < maxRise; step++) {
-        const above = world.getBlock(new Vec3(cx, cy + step, cz));
-        if (above != null && above.shapes.length > 0) {
-          top = f32(f32(Math.max(...above.shapes.map((shape) => shape[4]))) + (cy + step));
+        const above = collisionBox(new Vec3(cx, cy + step, cz));
+        if (above != null) {
+          top = f32(f32(above[4]) + (cy + step));
           if (top - y > maxRise) return;
         }
         if (step > 1 && !empty(headX, ++headY, headZ)) return;
@@ -2186,6 +2194,9 @@ export class BotcraftPhysics implements IPhysics {
    */
   private isSuffocating(block: Block | null): boolean {
     if (block == null) return false;
+    // (1.8 - 1.12: the client's own normal cubes, LegacyShapes)
+    const normalCube = this.legacyShapes.isNormalCube(block.type, block.metadata);
+    if (normalCube != null) return normalCube;
     const fullCube = block.shapes.length === 1 && block.shapes[0].every((v, i) => v === (i < 3 ? 0 : 1));
     if (this.verLessThan("1.14")) return fullCube && !block.transparent && block.name !== "redstone_block" && block.name !== "observer";
     if (/glass$|_leaves$|copper_grate$|^mangrove_roots$|^moving_piston$/.test(block.name)) return false;
