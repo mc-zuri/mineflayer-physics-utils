@@ -1190,6 +1190,14 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
+   * LocalPlayer.isSlowDueToUsingItem: an item in use whose use effects do not let a sprint go on (1.21.11 UseEffects
+   * .canSprint: a spear's do), which keeps a sprint from starting and closes the double tap window.
+   */
+  private isSlowDueToUsingItem(player: PlayerState) {
+    return player.isUsingItem && !player.useItemCanSprint;
+  }
+
+  /**
    * 1.21.5+ LocalPlayer.modifyInput, the float move vector: scaled by 0.98F, item use and the sneak slowdown, then stretched
    * towards the unit square (modifyInputSpeedForSquareMovement), so a diagonal is as fast as a straight move.
    */
@@ -1204,7 +1212,8 @@ export class BotcraftPhysics implements IPhysics {
       y = f32(y * factor);
     };
     scale(f32(0.98));
-    if (player.isUsingItem) scale(f32(0.2));
+    // (the item's use effects: 0.2F but for a spear's, 1.21.11 LocalPlayer.itemUseSpeedMultiplier)
+    if (player.isUsingItem) scale(player.useItemSpeedMultiplier);
     if (this.isMovingSlowly(ctx, world)) scale(this.sneakingSpeedFactor(player));
 
     const length = f32(Math.sqrt(f32(f32(x * x) + f32(y * y))));
@@ -1283,7 +1292,7 @@ export class BotcraftPhysics implements IPhysics {
     if (player.sprintTriggerTime > 0) player.sprintTriggerTime--;
     const prevSneakKey = player.prevControl.sneak;
     if (
-      player.isUsingItem ||
+      this.isSlowDueToUsingItem(player) ||
       (this.verGreaterThan("1.15.2") && prevSneakKey) ||
       (this.verGreaterThan("1.21.4") && player.control.back)
     ) {
@@ -1337,7 +1346,7 @@ export class BotcraftPhysics implements IPhysics {
     return !player.sprinting &&
       this.hasEnoughImpulseToStartSprinting(player, heading) &&
       this.hasEnoughFoodToSprint(ctx) &&
-      !player.isUsingItem &&
+      !this.isSlowDueToUsingItem(player) &&
       !player.blindness &&
       //  (!player.isPassenger || this.vehicleCanSprint(ctx)) &&
       (!movingSlowly || player.isUnderWater) &&

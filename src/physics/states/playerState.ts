@@ -248,6 +248,13 @@ export class PlayerState implements IEntityState {
     public isUsingItem: boolean = false;
     public isUsingMainHand: boolean = false;
     public isUsingOffHand: boolean = false;
+    /**
+     * The use effects of the item in use (1.21.11 UseEffects: DataComponents.USE_EFFECTS, a spear's lets a sprint go on at
+     * full speed): whether a sprint may go on, and the factor of the move input (UseEffects.DEFAULT: no, 0.2F). The bot
+     * says them as bot.usingItemEffects.
+     */
+    public useItemCanSprint: boolean = false;
+    public useItemSpeedMultiplier: number = Math.fround(0.2);
 
     public jumpBoost: number = 0;
     public speed: number = 0;
@@ -439,6 +446,9 @@ export class PlayerState implements IEntityState {
 
 
         this.isUsingItem = bot.usingHeldItem/*  || isEntityUsingItem(bot.entity, this.ctx.supportFeature); */
+        const useEffects = (bot as { usingItemEffects?: { canSprint?: boolean; speedMultiplier?: number } }).usingItemEffects;
+        this.useItemCanSprint = !!useEffects?.canSprint;
+        this.useItemSpeedMultiplier = Math.fround(useEffects?.speedMultiplier ?? 0.2);
         this.isUsingMainHand = !whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
         this.isUsingOffHand = whichHandIsEntityUsingBoolean(bot.entity, this.ctx.supportFeature) && this.isUsingItem;
 
@@ -614,6 +624,8 @@ export class PlayerState implements IEntityState {
         tmp.isUsingItem = this.isUsingItem;
         tmp.isUsingMainHand = this.isUsingMainHand;
         tmp.isUsingOffHand = this.isUsingOffHand;
+        tmp.useItemCanSprint = this.useItemCanSprint;
+        tmp.useItemSpeedMultiplier = this.useItemSpeedMultiplier;
 
         // effects
         tmp.effects = this.effects;
@@ -701,6 +713,8 @@ export class PlayerState implements IEntityState {
         this.isUsingItem = other.isUsingItem;
         this.isUsingMainHand = other.isUsingMainHand;
         this.isUsingOffHand = other.isUsingOffHand;
+        this.useItemCanSprint = other.useItemCanSprint;
+        this.useItemSpeedMultiplier = other.useItemSpeedMultiplier;
 
         // effects
         this.effects = other.effects;
