@@ -17,6 +17,10 @@ interface VersionData {
   families: Family[];
   /** the block states (id << 4 | data value) the client's pushOutOfBlocks takes for normal cubes */
   normalCube: Ranges;
+  /** the block states whose material blocks movement, to the water's flow (BlockLiquid.getFlow) */
+  flowBlocksMovement: Ranges;
+  /** the block states solid to falling water beside them (BlockLiquid.isBlockSolid; 1.12 causesDownwardCurrent) */
+  flowSolid: Ranges;
   /** 1.11+: the block states (id << 4 | data value) whose one box is not the bounds of their collision boxes */
   single?: Record<string, LegacyBox | null>;
 }
@@ -54,6 +58,8 @@ export class LegacyShapes {
   private readonly families = new Map<number, { joins: Record<Dir, Set<number>>; boxes: LegacyBox[][]; single?: LegacyBox[] }>();
   private readonly single: Record<string, LegacyBox | null> | null = null;
   private readonly normalCubes = new Set<number>();
+  private readonly flowBlocking = new Set<number>();
+  private readonly flowSolids = new Set<number>();
   private readonly stairs = new Set<number>();
   private readonly doors = new Set<number>();
   private readonly chests = new Set<number>();
@@ -70,7 +76,12 @@ export class LegacyShapes {
     this.enabled = data != null;
     if (!this.enabled) return;
     this.single = data.single ?? null;
-    for (const [from, to] of data.normalCube) for (let raw = from; raw <= to; raw++) this.normalCubes.add(raw);
+    const fill = (set: Set<number>, ranges: Ranges) => {
+      for (const [from, to] of ranges) for (let raw = from; raw <= to; raw++) set.add(raw);
+    };
+    fill(this.normalCubes, data.normalCube);
+    fill(this.flowBlocking, data.flowBlocksMovement);
+    fill(this.flowSolids, data.flowSolid);
     for (const family of data.families) {
       const expand = (ranges: Ranges) => {
         const set = new Set<number>();
@@ -116,6 +127,26 @@ export class LegacyShapes {
   isNormalCube(type: number, metadata: number): boolean | null {
     if (!this.enabled) return null;
     return this.normalCubes.has((type << 4) | metadata);
+  }
+
+  /**
+   * BlockLiquid.getFlow's test of a neighbour without water: whether its material blocks movement (no drop-off through
+   * it; signs, banners and pressure plates do, ladders, carpets, repeaters and snow layers do not). Null for a version
+   * without the data; an absent block is air.
+   */
+  flowBlocksMovement(block: { type: number; metadata: number } | null): boolean | null {
+    if (!this.enabled) return null;
+    return block != null && this.flowBlocking.has((block.type << 4) | block.metadata);
+  }
+
+  /**
+   * Whether falling water beside the block turns down (BlockLiquid.isBlockSolid, the material's isSolid; 1.12
+   * causesDownwardCurrent, a solid face and not ice, glass, leaves, slabs, stairs, ...). Null for a version without the
+   * data; an absent block is air.
+   */
+  flowSolid(block: { type: number; metadata: number } | null): boolean | null {
+    if (!this.enabled) return null;
+    return block != null && this.flowSolids.has((block.type << 4) | block.metadata);
   }
 
   /** Whether the version has getCollisionBoundingBox's boxes (1.11 and 1.12: the ones with auto-jump). */

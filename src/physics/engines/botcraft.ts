@@ -701,7 +701,9 @@ export class BotcraftPhysics implements IPhysics {
       const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
       const adjLevel = this.getRenderedDepth(adjBlock);
       if (adjLevel < 0) {
-        if (adjBlock && adjBlock.boundingBox === "empty") {
+        // (the neighbour's material does not block movement: the client's own test, 1.8 - 1.12)
+        const blocksMovement = this.legacyShapes.flowBlocksMovement(adjBlock) ?? (adjBlock == null || adjBlock.boundingBox !== "empty");
+        if (!blocksMovement) {
           const adjLevel = this.getRenderedDepth(world.getBlock(block.position.offset(dx, -1, dz)));
           if (adjLevel >= 0) {
             const f = adjLevel - (curlevel - 8);
@@ -728,7 +730,9 @@ export class BotcraftPhysics implements IPhysics {
       ]) {
         const adjBlock = world.getBlock(block.position.offset(dx, 0, dz));
         const adjUpBlock = world.getBlock(block.position.offset(dx, 1, dz));
-        if ((adjBlock && adjBlock.boundingBox !== "empty") || (adjUpBlock && adjUpBlock.boundingBox !== "empty")) {
+        // (BlockLiquid.isBlockSolid; 1.12 causesDownwardCurrent: the client's own test, 1.8 - 1.12)
+        const solid = (b: Block | null) => this.legacyShapes.flowSolid(b) ?? (b != null && b.boundingBox !== "empty");
+        if (solid(adjBlock) || solid(adjUpBlock)) {
           flow = this.normalizeVec(flow).translate(0, -6, 0); // Vec3d.normalize: float square root
           break;
         }
