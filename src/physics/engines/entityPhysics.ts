@@ -17,6 +17,7 @@ import { EPhysicsCtx } from "../settings/entityPhysicsCtx";
 import { EntityState, IEntityState } from "../states";
 import { IPhysics } from "./IPhysics";
 import { PlayerState } from "../states";
+import { LegacyShapes } from "./legacyShapes";
 
 type CheapEffectNames = keyof ReturnType<typeof getStatusEffectNamesForVersion>;
 type CheapEnchantmentNames = keyof ReturnType<typeof getEnchantmentNamesForVersion>;
@@ -50,8 +51,12 @@ export class EntityPhysics implements IPhysics {
   public readonly statusEffectNames: { [type in CheapEffects]: string };
   public readonly enchantmentNames: { [type in CheapEnchantments]: string };
 
+  /** Before 1.13 the collision shapes the client takes from a block's neighbours (fences, panes, walls, stairs...). */
+  protected readonly legacyShapes: LegacyShapes;
+
   constructor(mcData: md.IndexedData) {
     this.data = mcData;
+    this.legacyShapes = new LegacyShapes(mcData);
     const blocksByName = mcData.blocksByName;
     this.supportFeature = makeSupportFeature(mcData);
     this.movementSpeedAttribute = (this.data.attributesByName.movementSpeed as any).resource;
@@ -129,7 +134,7 @@ export class EntityPhysics implements IPhysics {
         const block = world.getBlock(cursor);
         if (block) {
           const blockPos = block.position;
-          for (const shape of block.shapes) {
+          for (const shape of this.blockShapes(block, world)) {
             const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
             blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
             surroundingBBs.push(blockBB);
@@ -138,6 +143,19 @@ export class EntityPhysics implements IPhysics {
       }
     }
     return surroundingBBs;
+  }
+
+  /**
+   * The block's collision shapes: before 1.13 those of a block whose shape the client takes from its neighbours
+   * (LegacyShapes: a fence's arms, a stair's corner...) from the world's blocks around it; else minecraft-data's.
+   */
+  protected blockShapes(block: Block, world: any /*prismarine-world*/): number[][] {
+    if (this.legacyShapes.enabled && block.position) {
+      const pos = block.position;
+      const shapes = this.legacyShapes.shapes(block.type, block.metadata, (dx, dy, dz) => world.getBlock(pos.offset(dx, dy, dz)));
+      if (shapes != null) return shapes;
+    }
+    return block.shapes;
   }
 
   getSurroundingBBs(queryBB: AABB, world: any /*prismarine-world*/): AABB[] {
@@ -149,7 +167,7 @@ export class EntityPhysics implements IPhysics {
           const block = world.getBlock(cursor);
           if (block) {
             const blockPos = block.position;
-            for (const shape of block.shapes) {
+            for (const shape of this.blockShapes(block, world)) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
               blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
               surroundingBBs.push(blockBB);

@@ -681,14 +681,15 @@ export class RiddenMobPhysics extends BotcraftPhysics {
    * LiquidBlock.getCollisionShape: a still lava block (LEVEL 0) under no lava is its lower half for a strider whose
    * feet are above that (LivingEntity.canStandOnFluid).
    */
-  protected collisionShapes(block: Block, pos: Vec3): AABBPoints[] {
+  protected collisionShapes(block: Block, pos: Vec3, world?: World): AABBPoints[] {
     const mob = this.collider;
     if (mob instanceof RiddenMobState && mob.type === "strider" && block.type === this.lavaId) {
       const level = Number(block.getProperties().level ?? block.metadata);
       const lavaAbove = this.isLava(this.colliderWorld?.getBlock(pos.offset(0, 1, 0)));
       return level === 0 && !lavaAbove && this.isAboveStableFluid(mob, pos) ? [STABLE_FLUID_SHAPE] : [];
     }
-    return super.collisionShapes(block, pos);
+    // (before 1.13 the shapes the client takes from the neighbours, from the world the mob ticks in)
+    return super.collisionShapes(block, pos, world ?? this.colliderWorld ?? undefined);
   }
 
   /** AbstractNautilus.isPushedByFluid: no current moves a nautilus. */

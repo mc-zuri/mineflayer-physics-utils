@@ -472,7 +472,7 @@ export class BoatPhysics extends EntityPhysics {
             const block = world.getBlock(cursor);
             if (!block || block.boundingBox === "empty") continue;
             if (block.name === "lily_pad" || block.name === "waterlily") continue;
-            const shapes = block.shapes;
+            const shapes = this.blockShapes(block, world);
             if (!shapes?.length) continue;
             const meets = shapes.some((shape) =>
               new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]).translate(cursor.x, cursor.y, cursor.z).intersects(groundBB),
