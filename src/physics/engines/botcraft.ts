@@ -125,6 +125,9 @@ export class BotcraftPhysics implements IPhysics {
   protected webId: number;
   protected waterId: number;
   protected lavaId: number;
+  /** Before 1.13 the flowing water and lava are blocks of their own (BlockDynamicLiquid), of the same material. */
+  protected flowingWaterId: number;
+  protected flowingLavaId: number;
   protected ladderId: number;
   protected vineId: number;
   protected scaffoldId: number;
@@ -188,6 +191,8 @@ export class BotcraftPhysics implements IPhysics {
     this.webId = blocksByName.cobweb ? blocksByName.cobweb.id : blocksByName.web.id;
     this.waterId = blocksByName.water.id;
     this.lavaId = blocksByName.lava.id;
+    this.flowingWaterId = blocksByName.flowing_water?.id ?? -1; // before 1.13
+    this.flowingLavaId = blocksByName.flowing_lava?.id ?? -1; // before 1.13
     this.ladderId = blocksByName.ladder.id;
     this.vineId = blocksByName.vine.id;
     // BlockTags.CLIMBABLE (1.16+; ladder, vine and scaffolding before): each block from the version that adds it
@@ -320,7 +325,7 @@ export class BotcraftPhysics implements IPhysics {
       for (cursor.z = Math.floor(bb.minZ); cursor.z <= Math.floor(bb.maxZ); cursor.z++) {
         for (cursor.x = Math.floor(bb.minX); cursor.x <= Math.floor(bb.maxX); cursor.x++) {
           const block = world.getBlock(cursor);
-          if (block && (block.type === this.waterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
+          if (block && (block.type === this.waterId || block.type === this.flowingWaterId || this.waterLike.has(block.type) || block.getProperties().waterlogged)) {
             const waterLevel = cursor.y + 1 - this.getLiquidHeightPcent(block);
             if (Math.ceil(bb.maxY) >= waterLevel) {
               bbs.push(new AABB(cursor.x, cursor.y, cursor.z, cursor.x + 1, cursor.y + 1, cursor.z + 1));
@@ -702,7 +707,7 @@ export class BotcraftPhysics implements IPhysics {
 
     // Match Grim's FluidTypeFlowing: only actual water/lava block states carry
     // a falling fluid level. Waterlogged and source-like blocks use unrelated metadata.
-    const hasFluidLevel = block.type === this.waterId || block.type === this.lavaId;
+    const hasFluidLevel = [this.waterId, this.flowingWaterId, this.lavaId, this.flowingLavaId].includes(block.type);
     if (hasFluidLevel && block.metadata >= 8) {
       for (const [dx, dz] of [
         [0, 1],
@@ -841,7 +846,7 @@ export class BotcraftPhysics implements IPhysics {
    */
   private handleWaterMovementLegacy(player: PlayerState, world: World) {
     const f32 = Math.fround;
-    const isWater = (block: Block | null) => block != null && (block.type === this.waterId || block.name === "flowing_water");
+    const isWater = (block: Block | null) => block != null && (block.type === this.waterId || block.type === this.flowingWaterId);
     const heightPercent = (block: Block) => f32(((block.metadata >= 8 ? 0 : block.metadata) + 1) / 9);
     const bb = getCollider(player.pose, player.pos).expand(-0.001, -f32(0.4) - 0.001, -0.001);
     const maxY = Math.ceil(bb.maxY);
@@ -884,7 +889,8 @@ export class BotcraftPhysics implements IPhysics {
     for (cursor.x = Math.floor(bb.minX); cursor.x < Math.ceil(bb.maxX); cursor.x++) {
       for (cursor.y = Math.floor(bb.minY); cursor.y < Math.ceil(bb.maxY); cursor.y++) {
         for (cursor.z = Math.floor(bb.minZ); cursor.z < Math.ceil(bb.maxZ); cursor.z++) {
-          if (world.getBlock(cursor)?.type === this.lavaId) return true;
+          const type = world.getBlock(cursor)?.type;
+          if (type === this.lavaId || type === this.flowingLavaId) return true;
         }
       }
     }
@@ -944,7 +950,8 @@ export class BotcraftPhysics implements IPhysics {
     if (!block) return -1;
     if (this.waterLike.has(block.type)) return 0;
     if (block.getProperties().waterlogged) return 0;
-    if (block.type !== this.waterId) return -1;
+    // (BlockLiquid.getEffectiveFlowDecay before 1.13: any block of water's material, flowing or still)
+    if (block.type !== this.waterId && block.type !== this.flowingWaterId) return -1;
     const meta = block.metadata;
     return meta >= 8 ? 0 : meta;
   }
