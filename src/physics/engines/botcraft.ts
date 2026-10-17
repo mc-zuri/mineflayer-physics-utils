@@ -52,6 +52,122 @@ export interface MovingPiston {
   shapes: number[][];
 }
 
+/** A block's shape of several boxes as one VoxelShape: its boxes and the grid of each axis (world coordinates). */
+interface VoxelGroup {
+  boxes: AABB[];
+  points: number[][];
+}
+type GroupedAABB = AABB & { voxelGroup?: VoxelGroup };
+
+/**
+ * The grid of a block's VoxelShape: Shapes.box gives a box within the block whose bounds lie on a 1/2, 1/4 or 1/8 grid
+ * the whole grid of that axis (CubeVoxelShape, Shapes.findBits), any other box its bounds; Shapes.or joins the grids
+ * (DiscreteCubeMerger, the finer one; IndirectMerger, the union of the points).
+ */
+function voxelGroup(shapes: number[][], pos: Vec3, boxes: AABB[]): VoxelGroup {
+  const findBits = (min: number, max: number) => {
+    if (min < -1.0e-7 || max > 1.0000001) return -1;
+    for (let bits = 0; bits <= 3; bits++) {
+      const n = 1 << bits;
+      const a = min * n;
+      const b = max * n;
+      if (Math.abs(a - Math.round(a)) < 1.0e-7 * n && Math.abs(b - Math.round(b)) < 1.0e-7 * n) return bits;
+    }
+    return -1;
+  };
+  const sets: number[][] = [[], [], []];
+  for (const s of shapes) {
+    const bits = [0, 1, 2].map((axis) => findBits(s[axis], s[axis + 3]));
+    for (let axis = 0; axis < 3; axis++) {
+      if (bits.every((b) => b >= 0)) {
+        const n = 1 << bits[axis];
+        for (let k = 0; k <= n; k++) sets[axis].push(k / n);
+      } else {
+        sets[axis].push(s[axis], s[axis + 3]);
+      }
+    }
+  }
+  const offset = [pos.x, pos.y, pos.z];
+  const points = sets.map((values, axis) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const out: number[] = [];
+    for (const v of sorted) if (out.length === 0 || v - out[out.length - 1] >= 1.0e-7) out.push(v);
+    return out.map((v) => v + offset[axis]);
+  });
+  return { boxes, points };
+}
+
+const lo = (b: AABB, axis: number) => (axis === 0 ? b.minX : axis === 1 ? b.minY : b.minZ);
+const hi = (b: AABB, axis: number) => (axis === 0 ? b.maxX : axis === 1 ? b.maxY : b.maxZ);
+
+/** Whether a box reaches more than 1.0E-7 into another on every axis. */
+function overlapsStrictly(bb: AABB, box: AABB): boolean {
+  for (let axis = 0; axis < 3; axis++) {
+    if (!(hi(bb, axis) - 1.0e-7 > lo(box, axis) && lo(bb, axis) + 1.0e-7 < hi(box, axis))) return false;
+  }
+  return true;
+}
+
+/**
+ * VoxelShape.collideX over a VoxelShape's grid: from the cell the moving box's leading face is in, the first layer of
+ * cells beyond with a full one under the box stops it at that layer's face (a face within 1.0E-7 behind still counts).
+ * A box that starts inside the shape so passes the layers it is in and stands on a grid line of its own.
+ */
+function voxelGridCollide(axis: number, bb: AABB, d: number, group: VoxelGroup): number {
+  if (Math.abs(d) < 1.0e-7) return 0.0;
+  const { points, boxes } = group;
+  const size = (a: number) => points[a].length - 1;
+  // Mth.binarySearch: the last point at or below v (-1 below the first)
+  const findIndex = (a: number, v: number) => {
+    let index = -1;
+    for (let k = 0; k < points[a].length && points[a][k] <= v; k++) index = k;
+    return index;
+  };
+  const center = (a: number, k: number) => (points[a][k] + points[a][k + 1]) / 2;
+  const full = (cell: number[]) => {
+    const c = cell.map((k, a) => center(a, k));
+    return boxes.some((b) => c.every((v, a) => v > lo(b, a) && v < hi(b, a)));
+  };
+  const ay = (axis + 1) % 3;
+  const az = (axis + 2) % 3;
+  const e = hi(bb, axis);
+  const f = lo(bb, axis);
+  const i = findIndex(axis, f + 1.0e-7);
+  const j = findIndex(axis, e - 1.0e-7);
+  const k = Math.max(0, findIndex(ay, lo(bb, ay) + 1.0e-7));
+  const l = Math.min(size(ay), findIndex(ay, hi(bb, ay) - 1.0e-7) + 1);
+  const m = Math.max(0, findIndex(az, lo(bb, az) + 1.0e-7));
+  const n = Math.min(size(az), findIndex(az, hi(bb, az) - 1.0e-7) + 1);
+  const layerFull = (o: number) => {
+    for (let p = k; p < l; p++) {
+      for (let q = m; q < n; q++) {
+        const cell = [0, 0, 0];
+        cell[axis] = o;
+        cell[ay] = p;
+        cell[az] = q;
+        if (full(cell)) return true;
+      }
+    }
+    return false;
+  };
+  if (d > 0.0) {
+    for (let o = j + 1; o < size(axis); o++) {
+      if (o < 0 || !layerFull(o)) continue;
+      const g = points[axis][o] - e;
+      if (g >= -1.0e-7) d = Math.min(d, g);
+      return d;
+    }
+  } else if (d < 0.0) {
+    for (let o = Math.min(i - 1, size(axis) - 1); o >= 0; o--) {
+      if (!layerFull(o)) continue;
+      const g = points[axis][o + 1] - f;
+      if (g <= 1.0e-7) d = Math.max(d, g);
+      return d;
+    }
+  }
+  return d;
+}
+
 /** PistonMath.getMovementArea: the slab the face of box toward dir sweeps over distance. */
 function pistonMovementArea(box: AABB, dir: [number, number, number], distance: number): AABB {
   const [dx, dy, dz] = dir;
@@ -257,10 +373,18 @@ export class BotcraftPhysics implements IPhysics {
           const block = world.getBlock(cursor) as Block | null;
           if (block != null) {
             const blockPos = block.position;
-            for (const shape of this.collisionShapes(block, blockPos, world)) {
+            const shapes = this.collisionShapes(block, blockPos, world);
+            const boxes: AABB[] = [];
+            for (const shape of shapes) {
               const blockBB = new AABB(shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]);
               blockBB.translate(blockPos.x, blockPos.y, blockPos.z);
               surroundingBBs.push(blockBB);
+              boxes.push(blockBB);
+            }
+            // (a shape of several boxes is one VoxelShape from 1.13: its grid for a move that starts inside it)
+            if (boxes.length > 1 && !this.verLessThan("1.13")) {
+              const group = voxelGroup(shapes, blockPos, boxes);
+              for (const box of boxes) (box as GroupedAABB).voxelGroup = group;
             }
           }
         }
@@ -3464,8 +3588,17 @@ export class BotcraftPhysics implements IPhysics {
    */
   shapeCollide(axis: number, bb: AABB, colliders: AABB[], movement: number): number {
     if (Math.abs(movement) < COLLISION_EPSILON) return 0.0;
+    const done = new Set<VoxelGroup>();
     for (const collider of colliders) {
       if (Math.abs(movement) < COLLISION_EPSILON) return 0.0;
+      // a block's shape of several boxes the box starts inside: VoxelShape.collideX over its grid
+      const group = (collider as GroupedAABB).voxelGroup;
+      if (group && group.boxes.some((box) => overlapsStrictly(bb, box))) {
+        if (done.has(group)) continue;
+        done.add(group);
+        movement = voxelGridCollide(axis, bb, movement, group);
+        continue;
+      }
       movement = this.voxelShapeCollide(axis, bb, movement, [collider]);
     }
     return Math.abs(movement) < COLLISION_EPSILON && this.verLessThan("1.18") ? 0.0 : movement;
