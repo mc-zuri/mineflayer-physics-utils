@@ -67,6 +67,8 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
     const slotOf = (id: number) => slots?.get(id) ?? -1;
     const out: [number, NearbyEntity][] = [];
     const interpolation = (bot as { entityInterpolation?: { next?: (entity: Entity) => Vec3 } }).entityInterpolation;
+    // the vehicle the client left this tick in its vehicle's tick (1.16's Player.rideTick: mineflayer's leftVehicle)
+    const left = (self as { leftVehicle?: Entity | null }).leftVehicle;
     for (const other of Object.values(bot.entities ?? {})) {
         if (other === self || other.id === self.id || !other.name || other.width == null || other.height == null) continue;
         const shown = (other as { interpolatedPosition?: Vec3 }).interpolatedPosition ?? other.position;
@@ -88,7 +90,8 @@ function nearbyEntitiesOf(bot: Bot): NearbyEntity[] {
             name,
             id: other.id,
             isVehicle: (other.passengers?.length ?? 0) > 0,
-            sameVehicle: self.vehicle != null && (other === self.vehicle || other.vehicle === self.vehicle),
+            // (and the vehicle the player left in this tick's vehicle tick: it pushed before, its passenger then)
+            sameVehicle: (self.vehicle != null && (other === self.vehicle || other.vehicle === self.vehicle)) || (left != null && other.id === left.id),
             living: !NOT_LIVING_TYPES.has(other.type) && !NOT_LIVING.test(name),
             position: shown.clone(),
             boundingBox: boxAt(shown),

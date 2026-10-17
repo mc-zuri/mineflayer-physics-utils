@@ -15,6 +15,21 @@ describe("PlayerState nearby entities", () => {
     return rig.playerState;
   }
 
+  // 1.16's client leaves its vehicle in the vehicle's tick (Player.rideTick): the vehicle pushed then, the player still
+  // its passenger, so on that tick it is as the player's vehicle still (mineflayer's entity.leftVehicle; the horse of
+  // v_horse_dismount on 1.16.5, tick 22)
+  it("takes the vehicle the player left this tick as its vehicle still", () => {
+    const horse = { id: 503, name: "horse", type: "mob", position: new Vec3(0.9, 101, 38.5), width: 1.3964844, height: 1.6 };
+    const rig = createBotcraftPlayerRig({ version: "1.16.5", position: new Vec3(0.5, 101, 38.5) });
+    rig.fakePlayer.entity.id = 1;
+    rig.fakePlayer.entities = { 1: rig.fakePlayer.entity, 503: horse };
+    rig.playerState.update(rig.fakePlayer);
+    expect(rig.playerState.nearbyEntities[0].sameVehicle).toBe(false);
+    rig.fakePlayer.entity.leftVehicle = horse;
+    rig.playerState.update(rig.fakePlayer);
+    expect(rig.playerState.nearbyEntities[0].sameVehicle).toBe(true);
+  });
+
   it("builds the boxes of a cow and a boat as the vanilla client holds them", () => {
     const state = stateWith([
       { id: 38, name: "cow", position: new Vec3(0.9, 101, 38.5), width: 0.9, height: 1.4 },
