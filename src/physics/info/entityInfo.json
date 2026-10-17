@@ -154,7 +154,7 @@
         "internalId": 15,
         "name": "donkey",
         "displayName": "Donkey",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.5,
         "type": "animal",
         "category": "UNKNOWN"
@@ -364,7 +364,7 @@
         "internalId": 36,
         "name": "hoglin",
         "displayName": "Hoglin",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.4,
         "type": "animal",
         "category": "UNKNOWN"
@@ -374,7 +374,7 @@
         "internalId": 37,
         "name": "horse",
         "displayName": "Horse",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.6,
         "type": "animal",
         "category": "UNKNOWN"
@@ -574,7 +574,7 @@
         "internalId": 57,
         "name": "mule",
         "displayName": "Mule",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.6,
         "type": "animal",
         "category": "UNKNOWN"
@@ -794,7 +794,7 @@
         "internalId": 79,
         "name": "skeleton_horse",
         "displayName": "Skeleton Horse",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.6,
         "type": "animal",
         "category": "UNKNOWN"
@@ -1064,7 +1064,7 @@
         "internalId": 106,
         "name": "zoglin",
         "displayName": "Zoglin",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.4,
         "type": "hostile",
         "category": "UNKNOWN"
@@ -1084,7 +1084,7 @@
         "internalId": 108,
         "name": "zombie_horse",
         "displayName": "Zombie Horse",
-        "width": 1.39648,
+        "width": 1.3964844,
         "height": 1.6,
         "type": "animal",
         "category": "UNKNOWN"
