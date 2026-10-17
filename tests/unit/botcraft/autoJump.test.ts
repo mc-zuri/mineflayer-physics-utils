@@ -7,13 +7,15 @@ const groundLevel = 101;
 
 // x_autojump_block: a vanilla client with the auto-jump option walks east on stone towards a one-block step (x 3 - 5).
 // LocalPlayer.updateAutoJump queues a jump after tick 9's move, pressed on tick 10 (run here from tick 8's state).
+// (the option and LocalPlayer.updateAutoJump came with 1.10)
 const recorded: Record<string, { before: [number, number]; after: [number, number] }> = {
+  "1.10.2": { before: [1.9693212934561402, 0.11692814584565936], after: [2.3996001950695547, 0.1175815317740132] },
   "1.12.2": { before: [1.9693212934561402, 0.11692814584565936], after: [2.3996001950695547, 0.1175815317740132] },
   "1.21.11": { before: [1.9693214940821298, 0.11692816181141515], after: [2.399600454447249, 0.11758154782898447] },
 };
 
 function walkToStep(version: string, autoJump: boolean, onStep?: string) {
-  const [posX, velX] = recorded[version].before;
+  const [posX, velX] = (recorded[version] ?? recorded["1.10.2"]).before;
   const rig = createBotcraftPlayerRig({ version, position: new Vec3(posX, groundLevel, 1381.5), groundLevel });
   const world = createFlatWorld(version, groundLevel) as any;
   for (let x = 3; x <= 5; x++) {
@@ -40,6 +42,11 @@ describe("Botcraft auto-jump", () => {
     rig.fakePlayer.physics = { autoJump: true };
     rig.playerState.update(rig.fakePlayer, rig.playerState.control);
     expect(rig.playerState.autoJumpEnabled).toBe(true);
+  });
+
+  // 1.9's client has no auto-jump: it walks into the step
+  it("does not jump before 1.10, the option on", () => {
+    expect(walkToStep("1.9.4", true).pos.y).toBe(groundLevel);
   });
 
   for (const version of Object.keys(recorded)) {

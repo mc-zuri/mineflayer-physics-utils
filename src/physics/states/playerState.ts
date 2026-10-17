@@ -225,7 +225,7 @@ export class PlayerState implements IEntityState {
     public sprintTriggerTime: number = 0;
     /** The forward impulse of the tick before, slowed (before 1.21.5) or normalized (1.21.5+), not yet scaled by 0.98F. */
     public prevForwardImpulse: number = 0;
-    /** The client's auto-jump option (1.11+), and LocalPlayer.autoJumpTime: a jump is pressed for the player next tick. */
+    /** The client's auto-jump option (1.10+), and LocalPlayer.autoJumpTime: a jump is pressed for the player next tick. */
     public autoJumpEnabled: boolean = false;
     public autoJumpTime: number = 0;
     /** The jump auto-jump presses this tick (KeyboardInput.tick's makeJump): part of the tick's input, as the client sends it. */

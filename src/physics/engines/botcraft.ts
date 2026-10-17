@@ -1624,7 +1624,7 @@ export class BotcraftPhysics implements IPhysics {
   }
 
   /**
-   * LocalPlayer.updateAutoJump (1.11+, with the auto-jump option), after the player's move by dx, dz: walking on the
+   * LocalPlayer.updateAutoJump (1.10+, with the auto-jump option), after the player's move by dx, dz: walking on the
    * ground into a step between 0.5 and 1.2 (more with jump boost) high, with room above, queues a jump for the next
    * tick. The step is the first block box that the two lines 0.51 above the feet, half a width to each side, cross
    * on the way 7 ticks of speed (at least the move) ahead.
@@ -1632,7 +1632,7 @@ export class BotcraftPhysics implements IPhysics {
   private updateAutoJump(ctx: EPhysicsCtx, world: World, dx: number, dz: number, moveVector: { x: number; y: number }) {
     const f32 = Math.fround;
     const player = ctx.state as PlayerState;
-    if (!player.autoJumpEnabled || this.verLessThan("1.11") || player.autoJumpTime > 0 || !player.onGround) return;
+    if (!player.autoJumpEnabled || this.verLessThan("1.10") || player.autoJumpTime > 0 || !player.onGround) return;
     if (player.control.sneak || (moveVector.x === 0 && moveVector.y === 0)) return;
     if (this.verGreaterThan("1.14.4") && this.getBlockJumpFactor(player, world, ctx.worldSettings) < 1) return;
 

@@ -10,7 +10,7 @@ interface Family {
   blocks: number[];
   connect: { all?: Ranges; north?: Ranges; south?: Ranges; west?: Ranges; east?: Ranges };
   boxes: LegacyBox[][];
-  /** 1.11+: BlockState.getCollisionBoundingBox's one box of each way to join (LocalPlayer.updateAutoJump's) */
+  /** 1.10+: BlockState.getCollisionBoundingBox's one box of each way to join (LocalPlayer.updateAutoJump's) */
   single?: LegacyBox[];
 }
 interface VersionData {
@@ -21,7 +21,7 @@ interface VersionData {
   flowBlocksMovement: Ranges;
   /** the block states solid to falling water beside them (BlockLiquid.isBlockSolid; 1.12 causesDownwardCurrent) */
   flowSolid: Ranges;
-  /** 1.11+: the block states (id << 4 | data value) whose one box is not the bounds of their collision boxes */
+  /** 1.10+: the block states (id << 4 | data value) whose one box is not the bounds of their collision boxes */
   single?: Record<string, LegacyBox | null>;
 }
 
@@ -149,13 +149,13 @@ export class LegacyShapes {
     return block != null && this.flowSolids.has((block.type << 4) | block.metadata);
   }
 
-  /** Whether the version has getCollisionBoundingBox's boxes (1.11 and 1.12: the ones with auto-jump). */
+  /** Whether the version has getCollisionBoundingBox's boxes (1.10 - 1.12: the ones with auto-jump). */
   get hasCollisionBox(): boolean {
     return this.single != null;
   }
 
   /**
-   * BlockState.getCollisionBoundingBox (1.11, 1.12): the one box LocalPlayer.updateAutoJump asks of a block (null for
+   * BlockState.getCollisionBoundingBox (1.10 - 1.12): the one box LocalPlayer.updateAutoJump asks of a block (null for
    * none), its actual state's among its neighbours: a fence's or wall's is the outline of its arms, a block high; most
    * blocks' is the bounds of their collision boxes, `shapes` (minecraft-data's or the neighbours').
    */
