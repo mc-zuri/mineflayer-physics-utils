@@ -568,8 +568,11 @@ export class BotcraftPhysics implements IPhysics {
         return;
       }
     } else {
-      player.isInLava = false;
       player.isUnderLava = false;
+      // 1.14 - 1.15 keep isInLava from the last move (Entity.move's checkInsideBlocks), and lava neither pushes nor
+      // has a height to them (Entity.updateInWaterState: water alone)
+      if (!this.verLessThan("1.14") && this.verLessThan("1.16")) return;
+      player.isInLava = false;
       if (this.verLessThan("1.14")) {
         player.isInLava = this.isInLavaLegacy(player, world);
         return;
@@ -2802,6 +2805,8 @@ export class BotcraftPhysics implements IPhysics {
       }
       return;
     }
+    // 1.14 - 1.15: Entity.move clears isInLava before the blocks' entityInside, a lava block's sets it again
+    if (!this.verLessThan("1.14") && this.verLessThan("1.16")) player.isInLava = false;
     // the box shrunk by 0.001 before 1.19.3, by 1e-7 until 1.21.2, then by 1e-5F (boxTraverseBlocks)
     const inset = this.verLessThan("1.19.3") ? 0.001 : this.verLessThan("1.21.2") ? 1e-7 : 9.999999747378752e-6;
     // the box the move left (before 1.17 vanilla keeps it, with its pre-1.14 sneaking height of 1.65F)
@@ -3021,7 +3026,10 @@ export class BotcraftPhysics implements IPhysics {
     worldSettings: PhysicsWorldSettings,
     intersects: boolean
   ) {
-    if (this.webId === block.type) {
+    if (this.lavaId === block.type) {
+      // LiquidBlock.entityInside (1.14 - 1.15): any lava block the box is in, whatever its level
+      if (!this.verLessThan("1.14") && this.verLessThan("1.16")) player.isInLava = true;
+    } else if (this.webId === block.type) {
       // WebBlock::entityInside
       player.stuckSpeedMultiplier = new Vec3(0.25, 0.05000000074505806, 0.25);
       player.fallDistance = 0; // makeStuckInBlock
