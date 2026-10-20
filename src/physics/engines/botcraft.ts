@@ -1700,7 +1700,10 @@ export class BotcraftPhysics implements IPhysics {
     //   player.sprintTriggerTime = ctx.worldSettings.sprintTimeTriggerCooldown;
     // }
 
-    player.attributes[this.movementSpeedAttribute] = attr;
+    // (into a copy of the state's attributes: a state made from the bot (FROM_BOT, clone) holds the bot's own object,
+    // and a look-ahead of the bot that stops sprinting took the modifier off the bot, which then went on sprinting at
+    // its walking speed until its next setSprinting; the bot takes the state's attributes when the state is applied)
+    player.attributes = { ...player.attributes, [this.movementSpeedAttribute]: attr };
     player.sprinting = value;
   }
 
