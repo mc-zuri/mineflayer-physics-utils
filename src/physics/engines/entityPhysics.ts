@@ -650,8 +650,11 @@ export class EntityPhysics implements IPhysics {
       if (entity.state.onGround && blockUnder && blockUnder.type !== entity.ctx.data.blocksByName.air.id) {
         let playerSpeedAttribute;
         if (entity.state.attributes && entity.state.attributes[this.movementSpeedAttribute]) {
-          // Use server-side player attributes
-          playerSpeedAttribute = entity.state.attributes[this.movementSpeedAttribute];
+          // Use server-side player attributes (a copy: the state's attributes are the bot's own when the state was made
+          // from the bot, and a simulation without the sprint key took the sprint modifier off the bot, which went on
+          // sprinting at its walking speed until its next setSprinting)
+          const synced = entity.state.attributes[this.movementSpeedAttribute];
+          playerSpeedAttribute = { ...synced, modifiers: [...synced.modifiers] };
         } else {
           // Create an attribute if the player does not have it
           //TODO: Generalize to all entities.

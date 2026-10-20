@@ -3,6 +3,8 @@ import expect from "expect";
 import { Vec3 } from "vec3";
 import type { Bot } from "mineflayer";
 import { EPhysicsCtx } from "../../../src/physics/settings";
+import { EntityPhysics } from "../../../src";
+import { ControlStateHandler } from "../../../src/physics/player";
 import { PlayerState } from "../../../src/physics/states/playerState";
 import { createBotcraftPlayerRig, createFlatWorld } from "../../helpers/unit/botcraftTestSupport";
 
@@ -44,6 +46,30 @@ for (const [version, sprintId] of [["1.20.4", "662a6b8d-da3e-4c1c-8813-96ea60972
       state.apply(rig.fakePlayer as Bot);
 
       expect(rig.fakePlayer.entity.attributes[rig.physics.movementSpeedAttribute].modifiers).toEqual([]);
+    });
+  });
+}
+
+// The same with the older engine the pathfinder's look-aheads run (bot.physicsUtil.engine: EntityPhysics, its
+// executors' isComplete): it took the sprint modifier off the server's attribute in place and put it back only for a
+// simulation that held the sprint key
+for (const version of ["1.20.4", "1.21.11"]) {
+  describe(`EntityPhysics sprint of a look-ahead (${version})`, () => {
+    it("a look-ahead without the sprint key leaves the bot's sprint modifier", () => {
+      const rig = createBotcraftPlayerRig({ version, position: new Vec3(0.5, groundLevel, 0.5), groundLevel });
+      const physics = new EntityPhysics(rig.mcData);
+      const key = physics.movementSpeedAttribute;
+      const sprint = { uuid: version === "1.20.4" ? "662a6b8d-da3e-4c1c-8813-96ea6097278d" : "minecraft:sprinting", amount: 0.30000001192092896, operation: 2 };
+      const speed = { value: 0.10000000149011612, modifiers: [sprint] };
+      rig.fakePlayer.entity.attributes = { [key]: speed };
+      rig.fakePlayer.entity.onGround = true;
+      const ctx = EPhysicsCtx.FROM_BOT(physics, rig.fakePlayer as Bot);
+      ctx.state.control = ControlStateHandler.DEFAULT();
+      ctx.state.control.set("forward", true);
+      physics.simulate(ctx, createFlatWorld(version, groundLevel) as any);
+
+      expect(rig.fakePlayer.entity.attributes[key]).toBe(speed);
+      expect(speed.modifiers).toEqual([sprint]);
     });
   });
 }
